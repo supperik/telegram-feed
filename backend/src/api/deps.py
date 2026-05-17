@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from fastapi import Depends, Header, Request
+from fastapi import Depends, Header, HTTPException, Request, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -52,3 +52,42 @@ async def get_current_user(
         await db.execute(update(User).where(User.id == user.id).values(last_seen_at=func.now()))
         await db.commit()
     return user
+
+
+async def get_current_admin(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db),
+):
+    """FastAPI dependency: extract and validate an admin JWT from the
+    Authorization header, return the Admin row.
+
+    Used by every /admin/* mutation endpoint (added in P2).
+    Raises 401 with {error: {code: ...}} envelope on any failure.
+    """
+    from sqlalchemy import select
+
+    from api.jwt_admin import decode_admin_token
+    from shared.models import Admin
+
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"error": {"code": "missing_bearer"}},
+        )
+    token = authorization.split(None, 1)[1]
+    try:
+        payload = decode_admin_token(token, expected_type="access")
+    except Exception:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"error": {"code": "invalid_admin_token"}},
+        )
+    admin_id = int(payload["sub"])
+    res = await db.execute(select(Admin).where(Admin.id == admin_id))
+    admin = res.scalar_one_or_none()
+    if admin is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"error": {"code": "admin_not_found"}},
+        )
+    return admin
