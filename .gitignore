@@ -54,6 +54,11 @@ volumes/
 docs/
 бизнес-требования.md
 
+# AI assistant configs (local-only)
+CLAUDE.md
+AGENTS.md
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
