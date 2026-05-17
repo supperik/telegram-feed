@@ -1,3 +1,4 @@
+import { useHideSource } from '@/features/posts/usePostActions';
 import { useRemoveSource } from '@/features/sources/useSources';
 import { Button } from '@/shared/ui/Button';
 import type { SourceListItem as Item } from '@/shared/api/types';
@@ -8,6 +9,7 @@ interface Props {
 
 export function SourceListItem({ item }: Props) {
   const remove = useRemoveSource();
+  const hide = useHideSource();
   const c = item.channel;
   const initial = c.title[0]?.toUpperCase() ?? '?';
   return (
@@ -26,6 +28,9 @@ export function SourceListItem({ item }: Props) {
           {item.subscription_status === 'pending_backfill' ? ' · backfilling…' : null}
         </span>
       </div>
+      <Button variant="ghost" onClick={() => hide.mutate(c.id)}>
+        Hide
+      </Button>
       <Button variant="secondary" onClick={() => remove.mutate(c.id)}>
         Remove
       </Button>

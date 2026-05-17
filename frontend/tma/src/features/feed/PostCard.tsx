@@ -1,5 +1,7 @@
 import { ChannelHeader } from '@/features/feed/ChannelHeader';
 import { MediaGallery } from '@/features/feed/MediaGallery';
+import { HideButton } from '@/features/posts/HideButton';
+import { SaveButton } from '@/features/posts/SaveButton';
 import type { FeedPost } from '@/shared/api/types';
 
 interface Props {
@@ -25,9 +27,13 @@ export function PostCard({ post }: Props) {
           {post.views !== null ? `${post.views} views` : null}
           {post.forwards !== null ? ` · ${post.forwards} forwards` : null}
         </span>
-        {link ? (
-          <a href={link} className="text-link" aria-label="Open in Telegram">Open in Telegram</a>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <SaveButton postId={post.id} isSaved={post.is_saved} />
+          <HideButton postId={post.id} />
+          {link ? (
+            <a href={link} className="text-link" aria-label="Open in Telegram">Open</a>
+          ) : null}
+        </div>
       </footer>
     </article>
   );
