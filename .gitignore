@@ -76,3 +76,6 @@ test-results/
 .dolt/
 *.db
 .beads-credential-key
+
+# Worktrees fallback location (used when EnterWorktree is unavailable in the session)
+.worktrees/
