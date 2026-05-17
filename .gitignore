@@ -50,6 +50,10 @@ volumes/
 # Claude Code local settings
 .claude/settings.local.json
 
+# Internal docs (local-only, not for the repo)
+docs/
+бизнес-требования.md
+
 # OS
 .DS_Store
 Thumbs.db
@@ -62,3 +66,8 @@ logs/
 playwright-report/
 test-results/
 .last-run.json
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

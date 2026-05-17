@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "telegram_feed",
+  "project_id": "237ecea6-abc9-4b9c-979f-8e4320055f38"
+}
