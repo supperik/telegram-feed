@@ -21,6 +21,7 @@ from shared.repositories.user_sources import (
     list_user_sources,
     remove_user_source,
 )
+from shared.repositories.user_states import hide_channel as hide_channel_repo
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -121,5 +122,18 @@ async def remove_source(
     user: User = Depends(get_current_user),
 ) -> Response:
     await remove_user_source(db, user_id=user.id, channel_id=channel_id)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/{channel_id}/hide", status_code=204)
+async def hide_source(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    if await db.get(Channel, channel_id) is None:
+        raise APIError(code="channel_not_found", message="Channel not found", status_code=404)
+    await hide_channel_repo(db, user_id=user.id, channel_id=channel_id)
     await db.commit()
     return Response(status_code=204)

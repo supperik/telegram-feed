@@ -1,7 +1,7 @@
 import pytest
 
 from shared.auth.jwt import encode_access
-from shared.models import Channel
+from shared.models import Channel, UserHiddenChannel
 
 
 SECRET = "x" * 32
@@ -100,3 +100,25 @@ async def test_delete_source_decrements_ref(async_client, db_session, seed_user)
 
     rows = (await async_client.get("/sources", headers=_auth(user_id))).json()["items"]
     assert rows == []
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_hide_source_persists(async_client, db_session, seed_user) -> None:
+    uid = await seed_user(tg_user_id=16)
+    ch = Channel(tg_chat_id=66666, username="hideme", title="Hideme")
+    db_session.add(ch)
+    await db_session.commit()
+
+    r = await async_client.post(f"/sources/{ch.id}/hide", headers=_auth(uid))
+    assert r.status_code == 204
+    assert await db_session.get(UserHiddenChannel, (uid, ch.id)) is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_hide_unknown_source_returns_404(async_client, seed_user) -> None:
+    uid = await seed_user(tg_user_id=17)
+    r = await async_client.post("/sources/999999999/hide", headers=_auth(uid))
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "channel_not_found"

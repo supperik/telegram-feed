@@ -45,6 +45,9 @@ def create_app() -> FastAPI:
     from api.routers import feed as feed_router
     app.include_router(feed_router.router)
 
+    from api.routers import posts as posts_router
+    app.include_router(posts_router.router)
+
     origins = [o.strip() for o in get_settings().api_cors_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
