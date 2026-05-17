@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # Telethon sessions (contain Telegram auth — never commit)
 *.session

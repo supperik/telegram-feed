@@ -2,6 +2,10 @@
 
 Telegram Mini App that aggregates posts from selected Telegram channels into a single feed.
 
+## Production deployment
+
+See [`RUNBOOK-prod.md`](RUNBOOK-prod.md) for a step-by-step guide from a fresh Ubuntu 24.04 VDS to a working stack on `zupperik.dev` (TMA) and `admin.zupperik.dev` (admin SPA), including Let's Encrypt, Telethon SMS login, and BotFather setup.
+
 ## Local development quickstart
 
 Prereqs: Docker Desktop, Python 3.12 on host, Poetry (one-time: `py -3.12 -m pip install --user poetry`).

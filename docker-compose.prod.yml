@@ -1,0 +1,47 @@
+# Production overlay for zupperik.dev.
+#
+# IMPORTANT: docker-compose.override.yml is auto-loaded ONLY when no -f flags
+# are passed. The runbook always uses explicit -f flags, so override.yml is
+# ignored on prod — dev bind-mounts and exposed DB ports never leak.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Or set in shell once:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+
+services:
+  postgres:
+    restart: always
+
+  redis:
+    restart: always
+
+  minio:
+    restart: always
+
+  api:
+    restart: always
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    environment:
+      ENV: prod
+
+  ingester:
+    restart: always
+    environment:
+      ENV: prod
+
+  nginx:
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes: !override
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot
+      - ./frontend/tma/dist:/var/www/tma:ro
+      - ./frontend/admin/dist:/var/www/admin:ro
+
+volumes:
+  certbot_webroot:
