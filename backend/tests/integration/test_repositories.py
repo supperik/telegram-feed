@@ -124,3 +124,62 @@ def test_join_queue_pop_and_mark(configured_env, pg_container):
         await engine.dispose()
 
     asyncio.run(run())
+
+
+@pytest.mark.integration
+def test_upsert_post_idempotent_with_media(configured_env, pg_container):
+    async def run():
+        from datetime import datetime, timezone
+
+        from sqlalchemy import select
+        from shared.db import make_engine, make_session_factory
+        from shared.models import Media, Post
+        from shared.repositories.channels import upsert_channel
+        from shared.repositories.posts import upsert_post
+
+        engine = make_engine(pg_container["async_url"])
+        sf = make_session_factory(engine)
+        async with sf() as s:
+            ch = await upsert_channel(s, tg_chat_id=-100200004, username="postchan", title="P")
+            await s.commit()
+
+            post = {
+                "channel_id": ch.id,
+                "tg_message_id": 1,
+                "text": "hello",
+                "text_html": None,
+                "posted_at": datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc),
+                "edited_at": None,
+                "views": 10,
+                "forwards": 2,
+            }
+            media = [
+                {"type": "photo", "storage_key": None, "tg_file_id": "p1",
+                 "width": 100, "height": 80, "duration": None,
+                 "size_bytes": None, "position": 0},
+                {"type": "photo", "storage_key": None, "tg_file_id": "p2",
+                 "width": 200, "height": 160, "duration": None,
+                 "size_bytes": None, "position": 1},
+            ]
+            pid = await upsert_post(s, post, media)
+            await s.commit()
+            assert pid is not None
+
+            # Duplicate insert — same channel_id + tg_message_id — returns None.
+            pid_dup = await upsert_post(s, post, media)
+            await s.commit()
+            assert pid_dup is None
+
+            # Verify the row exists with two media in order.
+            r = await s.execute(select(Post).where(Post.id == pid))
+            p = r.scalar_one()
+            assert p.text == "hello"
+            r = await s.execute(
+                select(Media).where(Media.post_id == pid).order_by(Media.position.asc())
+            )
+            ms = r.scalars().all()
+            assert len(ms) == 2
+            assert [m.tg_file_id for m in ms] == ["p1", "p2"]
+        await engine.dispose()
+
+    asyncio.run(run())
