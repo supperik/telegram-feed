@@ -37,11 +37,20 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
     async def fake_run_forever():
         return None
 
+    async def fake_run_join_worker(*a, **kw):
+        return None
+
     with patch("ingester.main.make_client", return_value=fake_client), \
-         patch("ingester.main.run_forever", side_effect=fake_run_forever):
+         patch("ingester.main.run_forever", side_effect=fake_run_forever), \
+         patch("ingester.main.run_join_worker", side_effect=fake_run_join_worker), \
+         patch("ingester.main.make_engine") as fake_engine_factory:
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+        fake_engine_factory.return_value = fake_engine
         from ingester.main import main
         asyncio.run(main())
 
     fake_client.start.assert_awaited_once()
     fake_client.disconnect.assert_awaited_once()
     fake_client.get_me.assert_awaited_once()
+    fake_engine.dispose.assert_awaited_once()

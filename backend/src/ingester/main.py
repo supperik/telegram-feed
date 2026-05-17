@@ -3,8 +3,10 @@ import signal
 
 import structlog
 
+from ingester.join_worker import run_join_worker
 from ingester.session import default_sessions_dir
 from shared.config import get_settings
+from shared.db import make_engine, make_session_factory
 from shared.logging import configure_logging
 from shared.tg.client_factory import make_client
 
@@ -43,6 +45,8 @@ async def main() -> None:
 
     client = make_client(settings, sessions_dir=default_sessions_dir())
     await client.start(phone=settings.tg_phone)
+    engine = make_engine(settings.postgres_dsn)
+    session_factory = make_session_factory(engine)
     try:
         me = await client.get_me()
         log.info(
@@ -50,9 +54,13 @@ async def main() -> None:
             user_id=getattr(me, "id", None),
             username=getattr(me, "username", None),
         )
-        await run_forever()
+        await asyncio.gather(
+            run_forever(),
+            run_join_worker(client, session_factory),
+        )
     finally:
         await client.disconnect()
+        await engine.dispose()
 
 
 if __name__ == "__main__":
