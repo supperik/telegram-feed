@@ -1,19 +1,19 @@
 import asyncio
-import os
 import signal
 
 import structlog
-from telethon import TelegramClient
 
+from ingester.session import default_sessions_dir
 from shared.config import get_settings
 from shared.logging import configure_logging
+from shared.tg.client_factory import make_client
 
 log = structlog.get_logger(__name__)
 
 
-async def run_forever(client: TelegramClient) -> None:
-    """Block until SIGINT/SIGTERM. Plan 2 will replace this with the
-    NewMessage event loop; the skeleton just waits."""
+async def run_forever() -> None:
+    """Block until SIGINT/SIGTERM. Plan 2 phases 1-4 will replace this with
+    the actual concurrent task group; for Phase 0 the skeleton just waits."""
     stop = asyncio.Event()
 
     def _on_signal(*_: object) -> None:
@@ -41,11 +41,7 @@ async def main() -> None:
         )
         return
 
-    sessions_dir = os.environ.get("TG_SESSIONS_DIR", "/app/sessions")
-    os.makedirs(sessions_dir, exist_ok=True)
-    session_path = os.path.join(sessions_dir, settings.tg_session_name)
-
-    client = TelegramClient(session_path, settings.tg_api_id, settings.tg_api_hash)
+    client = make_client(settings, sessions_dir=default_sessions_dir())
     await client.start(phone=settings.tg_phone)
     try:
         me = await client.get_me()
@@ -54,7 +50,7 @@ async def main() -> None:
             user_id=getattr(me, "id", None),
             username=getattr(me, "username", None),
         )
-        await run_forever(client)
+        await run_forever()
     finally:
         await client.disconnect()
 
