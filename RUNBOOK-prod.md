@@ -126,6 +126,11 @@ echo "MINIO_SECRET_KEY=$(openssl rand -hex 32)"
 echo "API_JWT_SECRET=$(openssl rand -hex 32)"
 ```
 
+POSTGRES_PASSWORD=ad235f79282ad6d3b38ef8ded6921dc4
+MINIO_ACCESS_KEY=44b16da0c35d0208
+MINIO_SECRET_KEY=549827add5ff28308fa911304e12ff49ae1227e53b8d71bb644eabbe24f1c8d3
+API_JWT_SECRET=899d63e9d1301b73e991a06957c64e6d3d8932291414206da79198d33aff78a5
+
 Отредактируй `.env`:
 ```bash
 nano .env
@@ -137,6 +142,15 @@ nano .env
 - `TG_BOT_TOKEN` — токен от @BotFather
 
 `API_CORS_ORIGINS` оставь по умолчанию (`https://web.telegram.org,https://zupperik.dev,https://admin.zupperik.dev`). Если решил **не делать** admin-поддомен сейчас, убери из строки `,https://admin.zupperik.dev` — потом добавишь.
+
+**Если VDS-провайдер блокирует исходящий трафик к Telegram MTProto** (типичный симптом — `telethon.network.mtprotosender: Attempt N at connecting failed: TimeoutError` на шаге 8, при этом `curl https://1.1.1.1` отвечает) — пропусти userbot через свой MTProxy:
+```
+TG_PROXY_TYPE=mtproxy
+TG_PROXY_HOST=<твой mtproxy host>
+TG_PROXY_PORT=<порт, обычно 443>
+TG_PROXY_SECRET=<32-символьный hex secret из @MTProxybot или mtg>
+```
+Оставь `TG_PROXY_TYPE` пустым (по умолчанию) — Telethon идёт напрямую к Telegram-DC.
 
 Защити файл:
 ```bash
@@ -419,6 +433,11 @@ dcp down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session
 ### Ingester не подключается, в логах FloodWaitError
 - Аккаунт уже зашёл с другого IP / устройства недавно. Подожди указанное в ошибке количество секунд.
 - Не используй основной Telegram-аккаунт как userbot.
+
+### Ingester падает с `Connection to Telegram failed N time(s)` / `TimeoutError` на Attempt 1..6
+- VDS-провайдер режет MTProto-IP (`149.154.0.0/16`). Проверь: `curl -v --max-time 6 https://149.154.167.51:443` висит, а `curl https://1.1.1.1` — отвечает.
+- Решение: настрой MTProxy через переменные `TG_PROXY_*` в `.env` (см. шаг 4), затем `dcp restart ingester`.
+- Альтернатива: мигрировать VDS к провайдеру вне зоны блокировки (Hetzner / Contabo / OVH).
 
 ### Ingester циклится с запросом кода SMS
 - Сессия не сохранилась. Запусти интерактивный шаг 8 заново, **дай 10+ секунд** после `ingester.connected` перед Ctrl+C.

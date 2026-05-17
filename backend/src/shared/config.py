@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     tg_session_name: str = "userbot_main"
     tg_bot_token: str = ""
 
+    # Telegram proxy (MTProxy only). Leave tg_proxy_type empty for direct connection.
+    tg_proxy_type: Literal["", "mtproxy"] = ""
+    tg_proxy_host: str = ""
+    tg_proxy_port: int = 0
+    tg_proxy_secret: str = ""
+
     @field_validator("tg_api_id", mode="before")
     @classmethod
     def _empty_string_to_zero(cls, v: object) -> object:
