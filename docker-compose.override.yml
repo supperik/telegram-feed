@@ -1,0 +1,29 @@
+# Loaded automatically by `docker compose up` alongside docker-compose.yml.
+# Adds bind mounts, exposes ports, enables hot-reload.
+services:
+  postgres:
+    ports: ["5432:5432"]
+
+  redis:
+    ports: ["6379:6379"]
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"   # console UI
+
+  api:
+    ports: ["8000:8000"]
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/migrations:/app/migrations
+      - ./backend/alembic.ini:/app/alembic.ini
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      ENV: local
+
+  ingester:
+    volumes:
+      - ./backend/src:/app/src
+    environment:
+      ENV: local
