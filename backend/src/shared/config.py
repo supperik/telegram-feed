@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     tg_phone: str = ""
     tg_session_name: str = "userbot_main"
     tg_bot_token: str = ""
+
+    @field_validator("tg_api_id", mode="before")
+    @classmethod
+    def _empty_string_to_zero(cls, v: object) -> object:
+        # `.env.example` ships `TG_API_ID=` (empty); treat empty string as the default 0.
+        if isinstance(v, str) and v.strip() == "":
+            return 0
+        return v
 
     # API / JWT
     api_jwt_secret: str = Field(min_length=16)
