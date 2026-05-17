@@ -1,17 +1,22 @@
+import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { routeTree } from './routeTree.gen';
+import { bootTelegram } from './shared/lib/telegram';
+import './styles/globals.css';
 
-// eslint-disable-next-line react-refresh/only-export-components
-const Root = () => (
-  <div className="flex h-full items-center justify-center text-2xl font-semibold">
-    Telegram Feed
-  </div>
-);
+bootTelegram();
+
+const router = createRouter({ routeTree });
+
+declare module '@tanstack/react-router' {
+  interface Register { router: typeof router }
+}
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root');
 createRoot(container).render(
   <StrictMode>
-    <Root />
+    <RouterProvider router={router} />
   </StrictMode>,
 );
