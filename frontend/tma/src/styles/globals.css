@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Sensible defaults; overridden by Telegram theme params at runtime. */
+  --tg-bg: #ffffff;
+  --tg-text: #000000;
+  --tg-hint: #6d7780;
+  --tg-link: #1d6cd1;
+  --tg-button: #1d6cd1;
+  --tg-button-text: #ffffff;
+  --tg-secondary-bg: #f4f4f5;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
