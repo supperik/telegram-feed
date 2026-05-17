@@ -32,6 +32,10 @@ export default [
       ],
       // `no-unused-vars` is superseded by the TS-aware rule above.
       'no-unused-vars': 'off',
+      // TypeScript already validates identifiers (including type-only globals
+      // like `RequestInit`) at compile time. The eslint `no-undef` rule does
+      // not know about TS type globals and produces false positives.
+      'no-undef': 'off',
     },
   },
 ];
