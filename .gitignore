@@ -1,0 +1,64 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Telethon sessions (contain Telegram auth — never commit)
+*.session
+*.session-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Node / frontend
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+dist/
+.vite/
+.cache/
+coverage/
+*.local
+
+# Docker / infra runtime data
+data/
+volumes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+playwright-report/
+test-results/
+.last-run.json
