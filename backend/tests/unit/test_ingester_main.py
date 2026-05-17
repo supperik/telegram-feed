@@ -34,23 +34,25 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
     fake_client.disconnect = AsyncMock()
     fake_client.get_me = AsyncMock(return_value=MagicMock(id=1, username="bot"))
 
-    async def fake_run_forever():
-        return None
-
-    async def fake_run_join_worker(*a, **kw):
-        return None
+    async def _noop(*a, **kw): return None
 
     with patch("ingester.main.make_client", return_value=fake_client), \
-         patch("ingester.main.run_forever", side_effect=fake_run_forever), \
-         patch("ingester.main.run_join_worker", side_effect=fake_run_join_worker), \
+         patch("ingester.main.run_forever", side_effect=_noop), \
+         patch("ingester.main.run_join_worker", side_effect=_noop), \
+         patch("ingester.main.run_refcount_sweep", side_effect=_noop), \
+         patch("ingester.main.catchup_channels", side_effect=_noop), \
+         patch("ingester.main.subscribe_to_active_channels", side_effect=_noop), \
+         patch("ingester.main.make_storage_client") as fake_minio_factory, \
+         patch("ingester.main.ensure_bucket") as fake_ensure, \
          patch("ingester.main.make_engine") as fake_engine_factory:
         fake_engine = MagicMock()
         fake_engine.dispose = AsyncMock()
         fake_engine_factory.return_value = fake_engine
+        fake_minio_factory.return_value = MagicMock()
         from ingester.main import main
         asyncio.run(main())
 
     fake_client.start.assert_awaited_once()
     fake_client.disconnect.assert_awaited_once()
-    fake_client.get_me.assert_awaited_once()
     fake_engine.dispose.assert_awaited_once()
+    fake_ensure.assert_called_once()

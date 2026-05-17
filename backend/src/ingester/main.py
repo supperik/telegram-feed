@@ -4,10 +4,13 @@ import signal
 import structlog
 
 from ingester.join_worker import run_join_worker
+from ingester.live import catchup_channels, subscribe_to_active_channels
+from ingester.refcount_sweep import run_refcount_sweep
 from ingester.session import default_sessions_dir
 from shared.config import get_settings
 from shared.db import make_engine, make_session_factory
 from shared.logging import configure_logging
+from shared.storage import ensure_bucket, make_storage_client
 from shared.tg.client_factory import make_client
 
 log = structlog.get_logger(__name__)
@@ -47,6 +50,8 @@ async def main() -> None:
     await client.start(phone=settings.tg_phone)
     engine = make_engine(settings.postgres_dsn)
     session_factory = make_session_factory(engine)
+    minio_client = make_storage_client()
+    ensure_bucket(minio_client, settings.minio_bucket)
     try:
         me = await client.get_me()
         log.info(
@@ -54,9 +59,17 @@ async def main() -> None:
             user_id=getattr(me, "id", None),
             username=getattr(me, "username", None),
         )
+        # Catch up BEFORE subscribing live so we don't miss anything.
+        await catchup_channels(client, session_factory, minio_client,
+                                bucket=settings.minio_bucket)
+        await subscribe_to_active_channels(client, session_factory,
+                                            minio_client=minio_client,
+                                            bucket=settings.minio_bucket)
         await asyncio.gather(
+            run_join_worker(client, session_factory,
+                            minio_client=minio_client, bucket=settings.minio_bucket),
+            run_refcount_sweep(client, session_factory),
             run_forever(),
-            run_join_worker(client, session_factory),
         )
     finally:
         await client.disconnect()

@@ -17,6 +17,12 @@ def _fake_session_factory(session):
     return factory
 
 
+async def _async_empty():
+    """Empty async generator, used to stub iter_messages with no results."""
+    if False:
+        yield
+
+
 def test_join_worker_happy_path(monkeypatch):
     """Happy path: one pending row → get_entity → join → upsert → ref_count → done.
 
@@ -47,9 +53,12 @@ def test_join_worker_happy_path(monkeypatch):
     async def _client_call(_req):
         return None
     fake_client.side_effect = _client_call
+    # Backfill calls iter_messages — stub it to yield nothing for this test.
+    fake_client.iter_messages = MagicMock(return_value=_async_empty())
 
     session = MagicMock()
     session.commit = AsyncMock()
+    session.execute = AsyncMock()  # used by _backfill_channel to mark active
 
     monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
     monkeypatch.setattr(jw, "upsert_channel", fake_upsert_channel)
@@ -62,9 +71,9 @@ def test_join_worker_happy_path(monkeypatch):
 
     async def driver():
         # Run one iteration of the loop.
-        await jw._handle_one_pending(fake_client, sf)
+        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
         # Second call: queue empty, should be a no-op.
-        await jw._handle_one_pending(fake_client, sf)
+        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
 
     asyncio.run(driver())
 
@@ -74,6 +83,8 @@ def test_join_worker_happy_path(monkeypatch):
     fake_inc_ref.assert_awaited_once_with(session, channel_id=99)
     fake_mark_done.assert_awaited_once_with(session, queue_id=42, channel_id=99)
     fake_mark_failed.assert_not_called()
+    # Backfill should have been triggered: iter_messages called once.
+    fake_client.iter_messages.assert_called_once()
 
 
 def test_join_worker_handles_username_not_occupied(monkeypatch):
@@ -98,7 +109,7 @@ def test_join_worker_handles_username_not_occupied(monkeypatch):
     monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
 
     sf = _fake_session_factory(session)
-    asyncio.run(jw._handle_one_pending(fake_client, sf))
+    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media"))
 
     fake_mark_failed.assert_awaited_once()
     args, kwargs = fake_mark_failed.call_args
@@ -137,7 +148,7 @@ def test_join_worker_handles_floodwait(monkeypatch):
     monkeypatch.setattr(jw.asyncio, "sleep", fake_sleep)
 
     sf = _fake_session_factory(session)
-    asyncio.run(jw._handle_one_pending(fake_client, sf))
+    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media"))
 
     fake_sleep.assert_awaited_once_with(4)  # 3 + 1
     fake_mark_failed.assert_not_called()
