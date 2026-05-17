@@ -54,6 +54,9 @@ def create_app() -> FastAPI:
     from api.routers.admin.auth import router as admin_auth_router
     app.include_router(admin_auth_router)
 
+    from api.routers.admin.channels import router as admin_channels_router
+    app.include_router(admin_channels_router)
+
     origins = [o.strip() for o in get_settings().api_cors_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
