@@ -197,3 +197,110 @@ def test_catchup_channels_fetches_missed_messages(monkeypatch):
     assert kwargs.get("min_id") == 5
     assert fake_normalize.call_count == 3
     assert fake_upsert.await_count == 3
+
+
+def test_catchup_channels_downloads_media_for_new_posts(monkeypatch):
+    """Catchup must download photo/video thumbs and set storage_key, matching
+    on_new_message behaviour. Regression for: every catchup-inserted Media
+    row landed with storage_key=NULL, so /api/media/{id} returned 404."""
+    from ingester import live
+
+    fake_client = MagicMock()
+
+    async def gen():
+        yield MagicMock(id=10)
+        yield MagicMock(id=11)
+
+    fake_client.get_entity = AsyncMock(return_value=MagicMock())
+    fake_client.iter_messages = MagicMock(return_value=gen())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    targets_result = MagicMock()
+    targets_result.all = MagicMock(return_value=[(7, -100, 5)])
+    session.execute = AsyncMock(return_value=targets_result)
+    sf = _session_factory(session)
+
+    photo_media = {"type": "photo", "storage_key": None, "tg_file_id": "p1",
+                   "width": 1, "height": 1, "duration": None,
+                   "size_bytes": None, "position": 0}
+    video_media = {"type": "video", "storage_key": None, "tg_file_id": "v1",
+                   "width": 2, "height": 2, "duration": 5,
+                   "size_bytes": None, "position": 0}
+    fake_normalize = MagicMock(side_effect=[
+        ({"channel_id": 7, "tg_message_id": 10, "text": None, "text_html": None,
+          "posted_at": None, "edited_at": None, "views": None, "forwards": None},
+         [photo_media]),
+        ({"channel_id": 7, "tg_message_id": 11, "text": None, "text_html": None,
+          "posted_at": None, "edited_at": None, "views": None, "forwards": None},
+         [video_media]),
+    ])
+    fake_upsert = AsyncMock(return_value=42)
+    fake_download_photo = AsyncMock(return_value="photos/7/10_p1.jpg")
+    fake_download_thumb = AsyncMock(return_value="video_thumbs/7/11_v1.jpg")
+
+    monkeypatch.setattr(live, "normalize_message", fake_normalize)
+    monkeypatch.setattr(live, "upsert_post", fake_upsert)
+    monkeypatch.setattr(live, "download_and_store_photo", fake_download_photo)
+    monkeypatch.setattr(live, "download_and_store_video_thumb", fake_download_thumb)
+
+    async def run():
+        await live.catchup_channels(
+            fake_client, sf, MagicMock(), bucket="media", limit=100
+        )
+
+    asyncio.run(run())
+
+    # Both downloads ran exactly once for their respective media types.
+    fake_download_photo.assert_awaited_once()
+    fake_download_thumb.assert_awaited_once()
+    # session.execute is called: 1x for targets SELECT + 1x upsert is mocked +
+    # 2x UPDATE Media.storage_key (photo + video). So at minimum 3 executes.
+    assert session.execute.await_count >= 3
+
+
+def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
+    """When upsert_post reports a duplicate (returns None), catchup must not
+    attempt to download media — same contract as on_new_message."""
+    from ingester import live
+
+    fake_client = MagicMock()
+
+    async def gen():
+        yield MagicMock(id=10)
+
+    fake_client.get_entity = AsyncMock(return_value=MagicMock())
+    fake_client.iter_messages = MagicMock(return_value=gen())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    targets_result = MagicMock()
+    targets_result.all = MagicMock(return_value=[(7, -100, 5)])
+    session.execute = AsyncMock(return_value=targets_result)
+    sf = _session_factory(session)
+
+    fake_normalize = MagicMock(return_value=(
+        {"channel_id": 7, "tg_message_id": 10, "text": None, "text_html": None,
+         "posted_at": None, "edited_at": None, "views": None, "forwards": None},
+        [{"type": "photo", "storage_key": None, "tg_file_id": "p1",
+          "width": 1, "height": 1, "duration": None,
+          "size_bytes": None, "position": 0}],
+    ))
+    fake_upsert = AsyncMock(return_value=None)  # duplicate
+    fake_download_photo = AsyncMock()
+    fake_download_thumb = AsyncMock()
+
+    monkeypatch.setattr(live, "normalize_message", fake_normalize)
+    monkeypatch.setattr(live, "upsert_post", fake_upsert)
+    monkeypatch.setattr(live, "download_and_store_photo", fake_download_photo)
+    monkeypatch.setattr(live, "download_and_store_video_thumb", fake_download_thumb)
+
+    async def run():
+        await live.catchup_channels(
+            fake_client, sf, MagicMock(), bucket="media", limit=100
+        )
+
+    asyncio.run(run())
+
+    fake_download_photo.assert_not_awaited()
+    fake_download_thumb.assert_not_awaited()
