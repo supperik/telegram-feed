@@ -110,6 +110,13 @@ cd /opt/telegram-feed
 
 Все дальнейшие команды — из `/opt/telegram-feed`.
 
+**Sanity-check владельца** (важно — типичная грабля: если `git clone` был выполнен не из-под `deploy`, файлы окажутся `root:root`, и поздняя auto-deploy через ssh+`deploy` упадёт с `fatal: detected dubious ownership` и `.env: permission denied`):
+```bash
+stat -c '%U:%G' /opt/telegram-feed/.git/config
+# Ожидается: deploy:deploy. Если видишь `root:root` — починить рекурсивно:
+sudo chown -R deploy:deploy /opt/telegram-feed
+```
+
 ---
 
 ## 4. Подготовка `.env`
