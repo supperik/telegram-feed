@@ -60,4 +60,10 @@ describe('PostCard', () => {
     expect(article).toHaveClass('bg-secondary');
     expect(article).toHaveClass('rounded-2xl');
   });
+
+  it('SaveButton reflects is_saved=true via aria-pressed', () => {
+    const saved = { ...post, is_saved: true };
+    render(<PostCard post={saved} />, { wrapper: wrap() });
+    expect(screen.getByRole('button', { name: /unsave/i })).toHaveAttribute('aria-pressed', 'true');
+  });
 });
