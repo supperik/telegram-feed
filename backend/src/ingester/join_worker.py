@@ -61,6 +61,26 @@ async def _backfill_channel(
         await session.commit()
 
 
+async def _post_join(session, *, row, chat):
+    """Common tail of any successful join: upsert channel, link user_source, mark done.
+
+    Used by both public-username flow and (T7) private-invite flow. Returns the
+    Channel ORM object so callers can run backfill outside the session block
+    (Telethon Channel from chat object is passed in separately and not stored).
+    """
+    channel = await upsert_channel(
+        session,
+        tg_chat_id=int(chat.id),
+        username=getattr(chat, "username", None),
+        title=getattr(chat, "title", None) or getattr(chat, "username", None) or "(no title)",
+    )
+    await add_user_source(
+        session, user_id=row.requested_by_user_id, channel_id=channel.id
+    )
+    await mark_join_done(session, queue_id=row.id, channel_id=channel.id)
+    return channel
+
+
 async def _handle_one_pending(
     client: TelegramClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -134,22 +154,11 @@ async def _handle_one_pending(
             log.error("join_worker.join_failed", username=username, error=str(e))
             return
 
-        channel = await upsert_channel(
-            session,
-            tg_chat_id=int(entity.id),
-            username=getattr(entity, "username", None) or username,
-            title=getattr(entity, "title", None) or username,
-        )
-        # Link the requester to the channel — this is what makes the channel
-        # show up in their /sources list. add_user_source also bumps ref_count
-        # internally when the link is new, so we don't call increment_ref_count
-        # separately here.
-        await add_user_source(
-            session,
-            user_id=pending.requested_by_user_id,
-            channel_id=channel.id,
-        )
-        await mark_join_done(session, queue_id=queue_id, channel_id=channel.id)
+        # Common tail (upsert channel + link user_source + mark done) is
+        # extracted into _post_join so the private-invite flow (T7) can share it.
+        # add_user_source bumps ref_count internally for new links, so we don't
+        # call increment_ref_count separately here.
+        channel = await _post_join(session, row=pending, chat=entity)
         await session.commit()
         log.info(
             "join_worker.joined",
