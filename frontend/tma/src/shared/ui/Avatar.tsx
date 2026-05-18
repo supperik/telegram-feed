@@ -26,7 +26,7 @@ export function Avatar({ photoUrl, title, size = 44 }: Props) {
     return (
       <img
         src={photoUrl}
-        alt={title}
+        alt=""
         style={style}
         className="shrink-0 rounded-full object-cover"
       />

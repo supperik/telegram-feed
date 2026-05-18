@@ -5,8 +5,9 @@ import { Avatar } from '@/shared/ui/Avatar';
 describe('Avatar', () => {
   it('renders <img> when photoUrl is provided', () => {
     render(<Avatar photoUrl="https://x/y.jpg" title="Meduza" />);
-    const img = screen.getByRole('img', { hidden: true });
+    const img = screen.getByRole('presentation');
     expect(img).toHaveAttribute('src', 'https://x/y.jpg');
+    expect(img).toHaveAttribute('alt', '');
   });
 
   it('renders gradient initial fallback when photoUrl is null', () => {
