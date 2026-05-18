@@ -156,3 +156,190 @@ def test_join_worker_handles_floodwait(monkeypatch):
     fake_sleep.assert_awaited_once_with(4)  # 3 + 1
     fake_mark_failed.assert_not_called()
     fake_mark_done.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T7 — _join_private flow (Telethon invite-hash branch)
+# ---------------------------------------------------------------------------
+
+import ingester.join_worker as jw  # noqa: E402
+
+
+def _fake_session_factory_t7():
+    """Build a fake async session and a context-manager factory.
+
+    Returns (factory, session). `factory()` returns the session; the session
+    supports `async with` and has `.commit = AsyncMock()`.
+    """
+    sess = MagicMock()
+    sess.commit = AsyncMock()
+    sess.__aenter__ = AsyncMock(return_value=sess)
+    sess.__aexit__ = AsyncMock(return_value=False)
+    factory = MagicMock(return_value=sess)
+    return factory, sess
+
+
+class _Row:
+    def __init__(self, id=1, invite_hash="abc12345", user_id=42, kind="private_invite"):
+        self.id = id
+        self.invite_hash = invite_hash
+        self.requested_by_user_id = user_id
+        self.kind = kind
+
+
+class _Chat:
+    def __init__(self, id=1001, title="Secret", username=None):
+        self.id = id
+        self.title = title
+        self.username = username
+
+
+@pytest.mark.asyncio
+async def test_join_private_happy_path(monkeypatch):
+    factory, sess = _fake_session_factory_t7()
+    client = MagicMock()
+    # CheckChatInviteRequest -> ChatInvite preview (not ChatInviteAlready, not request_needed)
+    check_invite = MagicMock()           # plain MagicMock => isinstance ChatInviteAlready == False
+    check_invite.request_needed = False
+    chat = _Chat()
+    updates = MagicMock(chats=[chat])
+    client_call = AsyncMock(side_effect=[check_invite, updates])
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    post_join = AsyncMock(return_value=MagicMock(id=42))
+    monkeypatch.setattr(jw, "_post_join", post_join)
+
+    row = _Row()
+    result = await jw._join_private(client, factory, row=row)
+    assert result is not None
+    assert result[0] is chat
+    post_join.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_join_private_chat_invite_already(monkeypatch):
+    factory, sess = _fake_session_factory_t7()
+    client = MagicMock()
+    chat = _Chat(id=2002)
+    already = MagicMock(spec=jw.ChatInviteAlready)
+    already.chat = chat
+    client_call = AsyncMock(return_value=already)
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    post_join = AsyncMock(return_value=MagicMock(id=42))
+    monkeypatch.setattr(jw, "_post_join", post_join)
+
+    row = _Row()
+    result = await jw._join_private(client, factory, row=row)
+    assert result is not None
+    assert result[0] is chat
+    post_join.assert_awaited_once()
+    # Import was NOT called — only one _invoke call (the Check)
+    assert client_call.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_join_private_request_needed_sent(monkeypatch):
+    from telethon.errors import InviteRequestSentError
+    factory, _ = _fake_session_factory_t7()
+    client = MagicMock()
+    invite_preview = MagicMock()
+    invite_preview.request_needed = True
+    # Check returns preview; Import raises InviteRequestSentError
+    client_call = AsyncMock(side_effect=[invite_preview, InviteRequestSentError(request=None)])
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    mark_pending = AsyncMock()
+    monkeypatch.setattr(jw, "mark_pending_approval", mark_pending)
+
+    row = _Row()
+    result = await jw._join_private(client, factory, row=row)
+    assert result is None
+    mark_pending.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_join_private_invite_hash_invalid(monkeypatch):
+    from telethon.errors import InviteHashInvalidError
+    factory, _ = _fake_session_factory_t7()
+    client = MagicMock()
+    client_call = AsyncMock(side_effect=InviteHashInvalidError(request=None))
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    mark_failed = AsyncMock()
+    monkeypatch.setattr(jw, "mark_join_failed", mark_failed)
+
+    row = _Row()
+    result = await jw._join_private(client, factory, row=row)
+    assert result is None
+    mark_failed.assert_awaited_once()
+    assert mark_failed.await_args.kwargs["error_code"] == "invite_invalid"
+
+
+@pytest.mark.asyncio
+async def test_join_private_invite_hash_expired(monkeypatch):
+    from telethon.errors import InviteHashExpiredError
+    factory, _ = _fake_session_factory_t7()
+    client = MagicMock()
+    client_call = AsyncMock(side_effect=InviteHashExpiredError(request=None))
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    mark_failed = AsyncMock()
+    monkeypatch.setattr(jw, "mark_join_failed", mark_failed)
+
+    row = _Row()
+    await jw._join_private(client, factory, row=row)
+    assert mark_failed.await_args.kwargs["error_code"] == "invite_expired"
+
+
+@pytest.mark.asyncio
+async def test_join_private_channels_too_much(monkeypatch):
+    from telethon.errors import ChannelsTooMuchError
+    factory, _ = _fake_session_factory_t7()
+    client = MagicMock()
+    preview = MagicMock()
+    preview.request_needed = False
+    client_call = AsyncMock(side_effect=[preview, ChannelsTooMuchError(request=None)])
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    mark_failed = AsyncMock()
+    monkeypatch.setattr(jw, "mark_join_failed", mark_failed)
+
+    row = _Row()
+    await jw._join_private(client, factory, row=row)
+    assert mark_failed.await_args.kwargs["error_code"] == "channels_too_much"
+
+
+@pytest.mark.asyncio
+async def test_join_private_flood_wait(monkeypatch):
+    from telethon.errors import FloodWaitError
+    factory, _ = _fake_session_factory_t7()
+    client = MagicMock()
+    preview = MagicMock()
+    preview.request_needed = False
+    client_call = AsyncMock(side_effect=[preview, FloodWaitError(request=None, capture=10)])
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    mark_failed = AsyncMock()
+    monkeypatch.setattr(jw, "mark_join_failed", mark_failed)
+
+    row = _Row()
+    await jw._join_private(client, factory, row=row)
+    assert mark_failed.await_args.kwargs["error_code"] == "flood_wait"
+
+
+@pytest.mark.asyncio
+async def test_join_private_user_already_participant_race(monkeypatch):
+    from telethon.errors import UserAlreadyParticipantError
+    factory, _ = _fake_session_factory_t7()
+    client = MagicMock()
+    preview = MagicMock()
+    preview.request_needed = False
+    chat = _Chat(id=3003)
+    already = MagicMock(spec=jw.ChatInviteAlready)
+    already.chat = chat
+    # 1) Check returns preview (not already); 2) Import raises UserAlreadyParticipant;
+    # 3) Re-Check returns ChatInviteAlready
+    client_call = AsyncMock(side_effect=[preview, UserAlreadyParticipantError(request=None), already])
+    monkeypatch.setattr(jw, "_invoke", client_call)
+    post_join = AsyncMock(return_value=MagicMock(id=42))
+    monkeypatch.setattr(jw, "_post_join", post_join)
+
+    row = _Row()
+    result = await jw._join_private(client, factory, row=row)
+    assert result is not None
+    assert result[0] is chat
+    post_join.assert_awaited_once()
