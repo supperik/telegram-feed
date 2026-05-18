@@ -13,6 +13,7 @@ export interface ChannelSummary {
   username: string | null;
   title: string;
   photo_url: string | null;
+  is_private: boolean;
 }
 
 export interface FeedMedia {
@@ -51,11 +52,12 @@ export interface SourceList {
   items: SourceListItem[];
 }
 
-export type QueueStatus = 'pending' | 'in_progress' | 'done' | 'failed';
+export type QueueStatus = 'pending' | 'in_progress' | 'pending_approval' | 'done' | 'failed';
 
 export interface QueueStatusOut {
   queue_id: number;
   status: QueueStatus;
+  error_code: string | null;
   error_reason: string | null;
   channel: ChannelSummary | null;
 }
@@ -63,3 +65,7 @@ export interface QueueStatusOut {
 export type AddSourceOut =
   | { status: 'subscribed'; channel: ChannelSummary; queue_id: null }
   | { status: 'queued'; channel: null; queue_id: number };
+
+export interface AddSourceIn {
+  input: string;
+}

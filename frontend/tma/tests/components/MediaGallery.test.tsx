@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { MediaGallery } from '@/features/feed/MediaGallery';
 import type { ChannelSummary, FeedMedia } from '@/shared/api/types';
 
-const channel: ChannelSummary = { id: 1, username: 'meduza', title: 'M', photo_url: null };
+const channel: ChannelSummary = { id: 1, username: 'meduza', title: 'M', photo_url: null, is_private: false };
 
 function makePhotos(n: number): FeedMedia[] {
   return Array.from({ length: n }, (_, i) => ({

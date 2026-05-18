@@ -15,7 +15,7 @@ function wrap() {
 }
 
 const item: Item = {
-  channel: { id: 7, username: 'meduza', title: 'Meduza', photo_url: null },
+  channel: { id: 7, username: 'meduza', title: 'Meduza', photo_url: null, is_private: false },
   added_at: new Date().toISOString(),
   subscription_status: 'active',
 };
