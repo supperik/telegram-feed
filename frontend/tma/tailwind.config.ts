@@ -12,6 +12,10 @@ export default {
         button: 'var(--tg-button)',
         'button-text': 'var(--tg-button-text)',
         secondary: 'var(--tg-secondary-bg)',
+        danger: 'var(--app-danger)',
+      },
+      boxShadow: {
+        card: 'var(--app-shadow-card)',
       },
     },
   },
