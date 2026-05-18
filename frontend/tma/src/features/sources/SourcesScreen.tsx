@@ -26,7 +26,6 @@ export function SourcesScreen() {
       </header>
 
       <AddSourceForm />
-      <div className="mt-1 px-4 pb-2 text-[11px] text-hint">Только публичные каналы (с @username).</div>
 
       {count === 0 ? (
         <EmptyState
