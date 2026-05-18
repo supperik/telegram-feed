@@ -1,12 +1,10 @@
 import { useMemo } from 'react';
-import Lightbox, { type SlideImage } from 'yet-another-react-lightbox';
-import Counter from 'yet-another-react-lightbox/plugins/counter';
+import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
-import 'yet-another-react-lightbox/plugins/counter.css';
 
 import { getTokens } from '@/features/auth/tokenStore';
-import type { ChannelSummary, FeedMedia } from '@/shared/api/types';
+import type { FeedMedia } from '@/shared/api/types';
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
 
@@ -17,47 +15,27 @@ function mediaUrl(id: number): string {
     : `${BASE}/media/${id}`;
 }
 
-function tgPostUrl(channel: ChannelSummary, msgId: number): string | null {
-  return channel.username ? `tg://resolve?domain=${channel.username}&post=${msgId}` : null;
-}
-
-interface MediaSlide extends SlideImage {
-  mediaType: 'photo' | 'video';
-}
-
 interface Props {
   media: FeedMedia[];
-  channel: ChannelSummary;
-  tgMessageId: number;
+  // Index into the PHOTO-only slide list (not into the full media[]).
   openIndex: number;
   onClose: () => void;
 }
 
-export function MediaLightbox({ media, channel, tgMessageId, openIndex, onClose }: Props) {
-  const tgUrl = tgPostUrl(channel, tgMessageId);
-
-  // Documents have no preview — skip them in the lightbox carousel.
-  const slides = useMemo<MediaSlide[]>(() => {
-    return media
-      .filter((m): m is FeedMedia & { type: 'photo' | 'video' } =>
-        m.type === 'photo' || m.type === 'video',
-      )
-      .map((m) => ({
-        src: mediaUrl(m.id),
-        width: m.width ?? undefined,
-        height: m.height ?? undefined,
-        mediaType: m.type,
-      }));
-  }, [media]);
-
-  // openIndex is an index into the original media[]. After filtering out
-  // documents, find the position of that media item in the slide list.
-  const slideIndex = useMemo(() => {
-    const count = media
-      .slice(0, openIndex)
-      .filter((m) => m.type === 'photo' || m.type === 'video').length;
-    return Math.min(count, Math.max(0, slides.length - 1));
-  }, [media, openIndex, slides.length]);
+export function MediaLightbox({ media, openIndex, onClose }: Props) {
+  // Photos only. Videos open Telegram from the tile directly; documents
+  // have no preview. Filtering here keeps the slide indices stable.
+  const slides = useMemo(
+    () =>
+      media
+        .filter((m) => m.type === 'photo')
+        .map((m) => ({
+          src: mediaUrl(m.id),
+          width: m.width ?? undefined,
+          height: m.height ?? undefined,
+        })),
+    [media],
+  );
 
   if (slides.length === 0) return null;
 
@@ -66,25 +44,16 @@ export function MediaLightbox({ media, channel, tgMessageId, openIndex, onClose 
       open
       close={onClose}
       slides={slides}
-      index={slideIndex}
-      plugins={[Zoom, Counter]}
-      controller={{ closeOnBackdropClick: true, closeOnPullDown: true }}
+      index={Math.min(openIndex, Math.max(0, slides.length - 1))}
+      plugins={[Zoom]}
+      // Only a close button in the toolbar. Zoom is driven by gestures
+      // (pinch, double-tap) and keyboard (+/-) — no +/− chrome.
+      toolbar={{ buttons: ['close'] }}
+      // Backdrop clicks and pull-down close used to fire mid-pinch and
+      // tear the viewer down — disabled.
+      controller={{ closeOnBackdropClick: false, closeOnPullDown: false }}
       carousel={{ finite: true }}
-      zoom={{ maxZoomPixelRatio: 4 }}
-      render={{
-        slideFooter: ({ slide }) => {
-          const s = slide as MediaSlide;
-          if (s.mediaType !== 'video' || !tgUrl) return null;
-          return (
-            <a
-              href={tgUrl}
-              className="absolute bottom-12 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/75 px-5 py-3 text-sm font-medium text-white shadow-lg"
-            >
-              ▶ Watch in Telegram
-            </a>
-          );
-        },
-      }}
+      zoom={{ maxZoomPixelRatio: 3, doubleTapDelay: 250 }}
     />
   );
 }
