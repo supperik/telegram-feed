@@ -4,6 +4,7 @@ import signal
 import structlog
 
 from ingester.backfill import backfill_recent_media
+from ingester.backfill_text_html import backfill_text_html
 from ingester.join_worker import run_join_worker
 from ingester.live import catchup_channels, subscribe_to_active_channels
 from ingester.refcount_sweep import run_refcount_sweep
@@ -69,6 +70,9 @@ async def main() -> None:
         # Idempotent: targets query is empty once everything is filled in.
         await backfill_recent_media(client, session_factory, minio_client,
                                      bucket=settings.minio_bucket, limit=50)
+        # Refill text_html for posts ingested before this column was wired
+        # to entities_to_html. Idempotent: no-op once everything is set.
+        await backfill_text_html(client, session_factory)
         await subscribe_to_active_channels(client, session_factory,
                                             minio_client=minio_client,
                                             bucket=settings.minio_bucket)
