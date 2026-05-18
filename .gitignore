@@ -83,3 +83,9 @@ infra/xray/config.json
 
 # Worktrees fallback location (used when EnterWorktree is unavailable in the session)
 .worktrees/
+
+# Superpowers brainstorming session artifacts (visual companion mockups)
+.superpowers/
+
+# SSH access for ad-hoc prod debugging (keys, host data, captured logs)
+.deploy/

@@ -7,35 +7,35 @@ import { BottomNav } from '@/shared/ui/BottomNav';
 function renderAtPath(path: string) {
   const rootRoute = createRootRoute({ component: () => <BottomNav /> });
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <div>feed</div> });
+  const savedRoute = createRoute({ getParentRoute: () => rootRoute, path: '/saved', component: () => <div>saved</div> });
   const sourcesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sources', component: () => <div>sources</div> });
-  const routeTree = rootRoute.addChildren([indexRoute, sourcesRoute]);
+  const routeTree = rootRoute.addChildren([indexRoute, savedRoute, sourcesRoute]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
   return render(<RouterProvider router={router} />);
 }
 
 describe('BottomNav', () => {
-  it('renders Feed and Sources links', async () => {
+  it('renders Лента, Сохранёнки and Источники links', async () => {
     renderAtPath('/');
-    // TanStack Router renders asynchronously after the initial route resolves;
-    // use `findByRole` for the first lookup so the test waits for the tree.
-    expect(await screen.findByRole('link', { name: /feed/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /sources/i })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /лента/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /сохранёнки/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /источники/i })).toBeInTheDocument();
   });
 
-  it('marks the active tab via aria-current', async () => {
+  it('marks Saved active when at /saved', async () => {
+    renderAtPath('/saved');
+    expect(await screen.findByRole('link', { name: /сохранёнки/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /лента/i })).not.toHaveAttribute('aria-current');
+  });
+
+  it('marks Sources active when at /sources', async () => {
     renderAtPath('/sources');
-    expect(await screen.findByRole('link', { name: /sources/i })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
-    expect(screen.getByRole('link', { name: /feed/i })).not.toHaveAttribute('aria-current');
+    expect(await screen.findByRole('link', { name: /источники/i })).toHaveAttribute('aria-current', 'page');
   });
 
   it('navigates on click', async () => {
     renderAtPath('/');
-    const sourcesLink = await screen.findByRole('link', { name: /sources/i });
-    await userEvent.click(sourcesLink);
-    // The active tab has switched.
-    expect(screen.getByRole('link', { name: /sources/i })).toHaveAttribute('aria-current', 'page');
+    await userEvent.click(await screen.findByRole('link', { name: /источники/i }));
+    expect(screen.getByRole('link', { name: /источники/i })).toHaveAttribute('aria-current', 'page');
   });
 });
