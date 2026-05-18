@@ -17,7 +17,7 @@ const tabs: Tab[] = [
 export function BottomNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-hint/15 bg-bg/95 backdrop-blur">
+    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-black/10 bg-bg">
       {tabs.map(({ to, label, Icon }) => {
         const active = pathname === to;
         return (
