@@ -24,45 +24,49 @@ async def _async_empty():
 
 
 def test_join_worker_happy_path(monkeypatch):
-    """Happy path: one pending row → get_entity → join → upsert → ref_count → done.
+    """Happy path: one pending row → get_entity → join → upsert →
+    add_user_source(requester) → done.
 
-    We monkeypatch the repository calls and Telethon client interactions.
+    Crucially the requester (pending.requested_by_user_id) MUST get a
+    UserSource link so the channel appears in their personal /sources list.
+    Otherwise the channel is joined globally but invisible to the user
+    who asked for it. ref_count is incremented inside add_user_source
+    (was_new=True path), so we do NOT separately call increment_ref_count
+    in the join_worker.
     """
     from ingester import join_worker as jw
 
-    pending = MagicMock(id=42, channel_username="testchan", channel_id=None)
+    pending = MagicMock(
+        id=42, channel_username="testchan", channel_id=None,
+        requested_by_user_id=11,
+    )
     entity = MagicMock(id=-100123, username="testchan", title="Test Chan")
     channel = MagicMock(id=99)
 
     fake_pop = AsyncMock(side_effect=[pending, None])  # one row, then drain
     fake_get_entity = AsyncMock(return_value=entity)
-    fake_join_call = AsyncMock()
     fake_upsert_channel = AsyncMock(return_value=channel)
-    fake_inc_ref = AsyncMock()
+    fake_add_user_source = AsyncMock(return_value=(True, "pending_backfill"))
+    fake_inc_ref = AsyncMock()  # MUST stay un-called — see assert_not_called below.
     fake_mark_done = AsyncMock()
     fake_mark_failed = AsyncMock()
 
     fake_client = MagicMock()
     fake_client.get_entity = fake_get_entity
-    fake_client.__call__ = AsyncMock()  # for client(JoinChannelRequest(...))
+    fake_client.__call__ = AsyncMock()
     fake_client.return_value = None
-    # Telethon's `await client(JoinChannelRequest(...))` is `client.__call__`,
-    # but on MagicMock the `client(req)` invocation is captured via .return_value.
-    # We patch the JoinChannelRequest to a no-op below; the worker's call
-    # `await client(JoinChannelRequest(entity))` will await the AsyncMock above.
     async def _client_call(_req):
         return None
     fake_client.side_effect = _client_call
-    # Backfill calls iter_messages — stub it to yield nothing for this test.
     fake_client.iter_messages = MagicMock(return_value=_async_empty())
 
     session = MagicMock()
     session.commit = AsyncMock()
-    session.execute = AsyncMock()  # used by _backfill_channel to mark active
+    session.execute = AsyncMock()
 
     monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
     monkeypatch.setattr(jw, "upsert_channel", fake_upsert_channel)
-    monkeypatch.setattr(jw, "increment_ref_count", fake_inc_ref)
+    monkeypatch.setattr(jw, "add_user_source", fake_add_user_source)
     monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
     monkeypatch.setattr(jw, "mark_join_failed", fake_mark_failed)
     monkeypatch.setattr(jw, "JoinChannelRequest", lambda e: ("join", e))
@@ -70,9 +74,7 @@ def test_join_worker_happy_path(monkeypatch):
     sf = _fake_session_factory(session)
 
     async def driver():
-        # Run one iteration of the loop.
         await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
-        # Second call: queue empty, should be a no-op.
         await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
 
     asyncio.run(driver())
@@ -80,10 +82,10 @@ def test_join_worker_happy_path(monkeypatch):
     fake_pop.assert_awaited()
     fake_get_entity.assert_awaited_once_with("testchan")
     fake_upsert_channel.assert_awaited_once()
-    fake_inc_ref.assert_awaited_once_with(session, channel_id=99)
+    # Requester is linked to the newly joined channel.
+    fake_add_user_source.assert_awaited_once_with(session, user_id=11, channel_id=99)
     fake_mark_done.assert_awaited_once_with(session, queue_id=42, channel_id=99)
     fake_mark_failed.assert_not_called()
-    # Backfill should have been triggered: iter_messages called once.
     fake_client.iter_messages.assert_called_once()
 
 

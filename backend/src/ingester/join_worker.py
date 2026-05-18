@@ -16,13 +16,14 @@ from telethon.tl.functions.channels import JoinChannelRequest
 
 from ingester.normalize import normalize_message
 from shared.models import ChannelSubscription
-from shared.repositories.channels import increment_ref_count, upsert_channel
+from shared.repositories.channels import upsert_channel
 from shared.repositories.join_queue import (
     mark_join_done,
     mark_join_failed,
     pop_pending_join_request,
 )
 from shared.repositories.posts import upsert_post
+from shared.repositories.user_sources import add_user_source
 
 log = structlog.get_logger(__name__)
 
@@ -129,7 +130,15 @@ async def _handle_one_pending(
             username=getattr(entity, "username", None) or username,
             title=getattr(entity, "title", None) or username,
         )
-        await increment_ref_count(session, channel_id=channel.id)
+        # Link the requester to the channel — this is what makes the channel
+        # show up in their /sources list. add_user_source also bumps ref_count
+        # internally when the link is new, so we don't call increment_ref_count
+        # separately here.
+        await add_user_source(
+            session,
+            user_id=pending.requested_by_user_id,
+            channel_id=channel.id,
+        )
         await mark_join_done(session, queue_id=queue_id, channel_id=channel.id)
         await session.commit()
         log.info(
