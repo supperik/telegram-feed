@@ -9,7 +9,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClass: Record<Variant, string> = {
   default: 'bg-black/5 text-hint hover:text-text active:bg-black/10',
-  danger: 'bg-danger/10 text-danger active:bg-danger/20',
+  danger: 'bg-danger-soft text-danger active:bg-danger-soft-pressed',
 };
 
 export function IconButton({

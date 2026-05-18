@@ -13,6 +13,12 @@
   --tg-secondary-bg: #ffffff;
   --app-danger: #d92d20;
   --app-shadow-card: 0 1px 3px rgba(0, 0, 0, .06);
+
+  /* Soft-tint variants — Tailwind v3 opacity modifiers don't apply to CSS-var colors,
+     so we pre-mix the alpha here as their own tokens. */
+  --app-link-soft: rgba(39, 120, 214, .1);
+  --app-danger-soft: rgba(217, 45, 32, .1);
+  --app-danger-soft-pressed: rgba(217, 45, 32, .2);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +31,9 @@
     --tg-secondary-bg: #232e3c;
     --app-danger: #ff5a4d;
     --app-shadow-card: none;
+    --app-link-soft: rgba(95, 168, 255, .18);
+    --app-danger-soft: rgba(255, 90, 77, .18);
+    --app-danger-soft-pressed: rgba(255, 90, 77, .28);
   }
 }
 

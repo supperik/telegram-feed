@@ -16,7 +16,7 @@ const GRADIENTS = [
 function gradientFor(title: string): string {
   let hash = 0;
   for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) | 0;
-  return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
+  return GRADIENTS[Math.abs(hash) % GRADIENTS.length]!;
 }
 
 export function Avatar({ photoUrl, title, size = 44 }: Props) {
