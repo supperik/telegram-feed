@@ -60,4 +60,23 @@ describe('SourceListItem', () => {
     await userEvent.click(screen.getByRole('button', { name: /удалить/i }));
     expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/sources/7'), expect.objectContaining({ method: 'DELETE' }));
   });
+
+  it('renders LockIcon + "Приватный" for is_private=true', () => {
+    const privateItem: Item = {
+      channel: { id: 10, username: null, title: 'Secret Club', photo_url: null, is_private: true },
+      added_at: new Date().toISOString(),
+      subscription_status: 'active',
+    };
+    render(<SourceListItem item={privateItem} />, { wrapper: wrap() });
+    expect(screen.getByText(/приватный/i)).toBeInTheDocument();
+    const svg = document.querySelector('svg[data-icon="lock"]');
+    expect(svg).toBeInTheDocument();
+  });
+
+  it('renders @username (no LockIcon) for is_private=false', () => {
+    render(<SourceListItem item={item} />, { wrapper: wrap() });
+    expect(screen.getByText('@meduza')).toBeInTheDocument();
+    expect(screen.queryByText(/приватный/i)).not.toBeInTheDocument();
+    expect(document.querySelector('svg[data-icon="lock"]')).not.toBeInTheDocument();
+  });
 });
