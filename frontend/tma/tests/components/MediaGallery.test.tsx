@@ -46,6 +46,17 @@ describe('MediaGallery', () => {
     render(<MediaGallery media={media} channel={channel} tgMessageId={42} />);
     expect(screen.getByText(/▶/)).toBeInTheDocument();
   });
+
+  it('video tile is a tg:// link, not a lightbox trigger', () => {
+    // Bytes for video aren't stored on the backend, so we don't try to
+    // play it inside the lightbox — tapping a video tile goes straight
+    // to Telegram instead. Lightbox is photos-only.
+    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
+    const { container } = render(<MediaGallery media={media} channel={channel} tgMessageId={42} />);
+    const a = container.querySelector('a[href^="tg://"]');
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute('href')).toBe('tg://resolve?domain=meduza&post=42');
+  });
 });
 
 describe('MediaGallery interaction (lightbox)', () => {
@@ -81,20 +92,20 @@ describe('MediaGallery interaction (lightbox)', () => {
     expect(lightboxImg?.getAttribute('src')).toMatch(/\/media\/1\?token=tok-abc/);
   });
 
-  it('clicking a video tile opens the lightbox with a "Watch in Telegram" link', async () => {
-    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
-    render(<MediaGallery media={media} channel={channel} tgMessageId={42} />);
+  it('opens the lightbox at the photo index, skipping leading videos', async () => {
+    // openIndex passed to MediaLightbox must be the position within the
+    // photo-only slide list, not within the full media[]. A leading video
+    // shouldn't shift the photo to a non-existent slot.
+    const media: FeedMedia[] = [
+      { id: 10, type: 'video', width: 800, height: 600, duration: 30 },
+      { id: 11, type: 'photo', width: 800, height: 600, duration: null },
+    ];
+    render(<MediaGallery media={media} channel={channel} tgMessageId={1} />);
+    // Photo tile is the second tappable element (first is the <a> for video).
     fireEvent.click(screen.getByRole('button', { name: /open media/i }));
     await screen.findByRole('button', { name: /close/i });
-    const tgLink = screen.getByRole('link', { name: /watch in telegram/i });
-    expect(tgLink).toHaveAttribute('href', 'tg://resolve?domain=meduza&post=42');
-  });
-
-  it('does not render a "Watch in Telegram" link for a photo slide', async () => {
-    render(<MediaGallery media={makePhotos(1)} channel={channel} tgMessageId={1} />);
-    fireEvent.click(screen.getByRole('button', { name: /open media/i }));
-    await screen.findByRole('button', { name: /close/i });
-    expect(screen.queryByRole('link', { name: /watch in telegram/i })).toBeNull();
+    const lightboxImg = document.querySelector('.yarl__slide img');
+    expect(lightboxImg?.getAttribute('src')).toMatch(/\/media\/11\?token=/);
   });
 
   it('clicking close removes the lightbox', async () => {
