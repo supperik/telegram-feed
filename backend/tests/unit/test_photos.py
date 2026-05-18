@@ -48,7 +48,11 @@ def test_download_and_store_photo_uses_correct_key_and_uploads():
     assert kwargs.get("content_type") == "image/jpeg"
 
 
-def test_download_video_thumbnail_uses_largest_thumb():
+def test_download_video_thumbnail_passes_message_with_thumb_index():
+    """Telethon needs the parent message + `thumb` kwarg to resolve a video
+    thumbnail to InputDocumentFileLocation. Passing a raw thumb object
+    yields empty bytes for PhotoStrippedSize / PhotoPathSize entries.
+    Regression: telegram-feed-b10."""
     from ingester.photos import download_and_store_video_thumb
 
     fake_client = MagicMock()
@@ -65,8 +69,7 @@ def test_download_video_thumbnail_uses_largest_thumb():
     key = asyncio.run(run())
 
     assert key == "video_thumbs/3/55_7777.jpg"
-    # Largest thumb is msg.video.thumbs[-1].
-    fake_client.download_media.assert_awaited_once_with(msg.video.thumbs[-1], bytes)
+    fake_client.download_media.assert_awaited_once_with(msg, bytes, thumb=-1)
     fake_minio.put_object.assert_called_once()
     args, kwargs = fake_minio.put_object.call_args
     assert args[0] == "media"

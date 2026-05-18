@@ -60,15 +60,21 @@ async def download_and_store_video_thumb(
     bucket: str,
 ) -> str | None:
     """Download the largest thumbnail of msg.video and upload to MinIO.
-    Returns the storage key or None if no thumb is available."""
+    Returns the storage key or None if no thumb is available.
+
+    Pass the parent message + `thumb` index to download_media, not a raw
+    thumb object. Raw PhotoStrippedSize / PhotoPathSize entries yield
+    empty bytes because they're inline placeholders without
+    InputDocumentFileLocation file refs; Telethon resolves the correct
+    downloadable thumb when given the message + index.
+    """
     video = msg.video
     if video is None:
         return None
     thumbs = getattr(video, "thumbs", None) or []
     if not thumbs:
         return None
-    largest = thumbs[-1]  # Telethon orders thumbs by ascending size.
-    data = await client.download_media(largest, bytes)
+    data = await client.download_media(msg, bytes, thumb=-1)
     if not data:
         try:
             log.warning("photos.empty_video_thumb", channel_id=channel_id, msg_id=msg.id)
