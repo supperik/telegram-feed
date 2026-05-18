@@ -73,12 +73,20 @@ async def main() -> None:
         # Refill text_html for posts ingested before this column was wired
         # to entities_to_html. Idempotent: no-op once everything is set.
         await backfill_text_html(client, session_factory)
-        await subscribe_to_active_channels(client, session_factory,
-                                            minio_client=minio_client,
-                                            bucket=settings.minio_bucket)
+        # Live handler shares a mutable chat_map with the join worker so
+        # newly-joined channels receive live updates without a restart
+        # (telegram-feed-3bv).
+        chat_map = await subscribe_to_active_channels(
+            client, session_factory,
+            minio_client=minio_client,
+            bucket=settings.minio_bucket,
+        )
         await asyncio.gather(
-            run_join_worker(client, session_factory,
-                            minio_client=minio_client, bucket=settings.minio_bucket),
+            run_join_worker(
+                client, session_factory,
+                minio_client=minio_client, bucket=settings.minio_bucket,
+                chat_map=chat_map,
+            ),
             run_refcount_sweep(client, session_factory),
             run_forever(),
         )

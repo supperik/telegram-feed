@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import structlog
 from minio import Minio
 from sqlalchemy import update
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from telethon import TelegramClient
 from telethon.errors import (
     ChannelPrivateError,
@@ -14,6 +14,7 @@ from telethon.errors import (
 )
 from telethon.tl.functions.channels import JoinChannelRequest
 
+from ingester.live import _to_marked_chat_id
 from ingester.normalize import normalize_message
 from shared.models import ChannelSubscription
 from shared.repositories.channels import upsert_channel
@@ -67,8 +68,16 @@ async def _handle_one_pending(
     *,
     minio_client: Minio,
     bucket: str,
+    chat_map: dict[int, int] | None = None,
 ) -> None:
-    """Pop one pending join, attempt it, commit the outcome. No-op if empty."""
+    """Pop one pending join, attempt it, commit the outcome. No-op if empty.
+
+    On successful join, when `chat_map` is provided, the new channel is
+    registered in it under its marked peer-id. This lets the live
+    NewMessage handler (see ingester.live.subscribe_to_active_channels)
+    pick up the new channel immediately, without an ingester restart
+    (telegram-feed-3bv).
+    """
     async with session_factory() as session:
         pending = await pop_pending_join_request(session)
         if pending is None:
@@ -141,6 +150,8 @@ async def _handle_one_pending(
         )
         await mark_join_done(session, queue_id=queue_id, channel_id=channel.id)
         await session.commit()
+        if chat_map is not None:
+            chat_map[_to_marked_chat_id(int(entity.id))] = channel.id
         log.info(
             "join_worker.joined",
             channel_id=channel.id,
@@ -161,6 +172,7 @@ async def run_join_worker(
     *,
     minio_client: Minio,
     bucket: str,
+    chat_map: dict[int, int] | None = None,
     poll_interval_s: float = 2.0,
 ) -> None:
     log.info("join_worker.started", poll_interval_s=poll_interval_s)
@@ -169,6 +181,7 @@ async def run_join_worker(
             await _handle_one_pending(
                 client, session_factory,
                 minio_client=minio_client, bucket=bucket,
+                chat_map=chat_map,
             )
         except Exception as e:  # noqa: BLE001 — keep loop alive
             log.exception("join_worker.loop_error", error=str(e))

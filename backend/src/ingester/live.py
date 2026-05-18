@@ -10,10 +10,12 @@ from functools import partial
 from typing import Any
 
 import structlog
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-from telethon import TelegramClient, events
 from minio import Minio
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from telethon import TelegramClient, events
+from telethon.tl.types import PeerChannel
+from telethon.utils import get_peer_id
 
 from ingester.normalize import normalize_message
 from ingester.photos import download_and_store_photo, download_and_store_video_thumb
@@ -23,17 +25,35 @@ from shared.repositories.posts import upsert_post
 log = structlog.get_logger(__name__)
 
 
+def _to_marked_chat_id(positive_supergroup_id: int) -> int:
+    """Convert a raw positive Telegram supergroup id (as stored in
+    Channel.tg_chat_id) to the marked peer-id form Telethon uses on
+    NewMessage events (e.g. 1319248631 → -1001319248631).
+
+    Telethon's event.chat_id is always the marked form; passing the raw
+    positive id into NewMessage(chats=...) or using it as a dict key for
+    event.chat_id lookups silently never matches. This is the conversion
+    that closes that mismatch.
+    """
+    return get_peer_id(PeerChannel(channel_id=positive_supergroup_id))
+
+
 async def _load_active_chat_map(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> dict[int, int]:
-    """Return {tg_chat_id: channel_id} for all channel_subscriptions where status='active'."""
+    """Return {marked_chat_id: channel_id} for active channel_subscriptions.
+
+    Keys are MARKED peer IDs (-100xxxxx), matching Telethon's
+    event.chat_id format. Channel.tg_chat_id in the DB is the raw
+    positive supergroup id; we normalize on the way out.
+    """
     async with session_factory() as session:
         res = await session.execute(
             select(Channel.tg_chat_id, Channel.id)
             .join(ChannelSubscription, ChannelSubscription.channel_id == Channel.id)
             .where(ChannelSubscription.status == "active")
         )
-        return {chat_id: ch_id for chat_id, ch_id in res.all()}
+        return {_to_marked_chat_id(chat_id): ch_id for chat_id, ch_id in res.all()}
 
 
 async def on_new_message(
@@ -133,10 +153,19 @@ async def subscribe_to_active_channels(
     minio_client: Minio,
     bucket: str,
 ) -> dict[int, int]:
-    """Load active channels from DB, register a NewMessage handler with
-    `chats=[chat_ids...]`. Return the chat_id -> channel_id map for the caller."""
+    """Load active channels from DB and register an UNFILTERED NewMessage
+    handler. Returns the {marked_chat_id: channel_id} map.
+
+    The handler intentionally has NO chats=... filter. Telethon resolves
+    chats=[...] to a static set at subscribe time, so (a) channels joined
+    later aren't seen until restart (telegram-feed-3bv) and (b) if the
+    wrong id format is passed (positive vs marked), every event is silently
+    dropped. Instead we accept all NewMessage events and filter inside
+    on_new_message via the returned (mutable) chat_map dict — join_worker
+    extends this dict after a successful join so the new channel
+    immediately receives live updates.
+    """
     chat_map = await _load_active_chat_map(session_factory)
-    chat_ids = list(chat_map.keys())
 
     handler = partial(
         _dispatch,
@@ -146,9 +175,9 @@ async def subscribe_to_active_channels(
         channel_id_map=chat_map,
         bucket=bucket,
     )
-    client.add_event_handler(handler, events.NewMessage(chats=chat_ids))
+    client.add_event_handler(handler, events.NewMessage())
     try:
-        log.info("live.subscribed", count=len(chat_ids))
+        log.info("live.subscribed", count=len(chat_map))
     except ValueError:
         pass
     return chat_map

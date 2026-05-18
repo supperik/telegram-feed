@@ -115,17 +115,22 @@ def test_on_new_message_skips_duplicate(monkeypatch):
 
 
 def test_subscribe_to_active_channels_loads_map_and_attaches_handler(monkeypatch):
-    """Loads all active channel_subscriptions, builds chat_id -> channel_id map,
-    registers a NewMessage handler with chats=list(map)."""
+    """Loads all active channel_subscriptions, builds chat_id -> channel_id map
+    (with MARKED peer IDs), and registers an unfiltered NewMessage handler.
+
+    No `chats=...` filter on events.NewMessage — Telethon resolves that to a
+    static set at subscribe time, which (a) breaks for channels joined after
+    boot (telegram-feed-3bv) and (b) historically silently dropped events when
+    positive supergroup IDs were passed instead of marked peer IDs. Filtering
+    happens inside on_new_message via channel_id_map.get(event.chat_id).
+    """
     from ingester import live
 
     fake_client = MagicMock()
     fake_client.add_event_handler = MagicMock()
 
-    # Two active channels in DB.
     session = MagicMock()
-    # We'll patch the SELECT in live._load_active_chat_map.
-    fake_load = AsyncMock(return_value={-100111: 1, -100222: 2})
+    fake_load = AsyncMock(return_value={-1001111: 1, -1002222: 2})
     monkeypatch.setattr(live, "_load_active_chat_map", fake_load)
 
     sf = _session_factory(session)
@@ -138,16 +143,50 @@ def test_subscribe_to_active_channels_loads_map_and_attaches_handler(monkeypatch
 
     result = asyncio.run(run())
 
-    assert result == {-100111: 1, -100222: 2}
+    assert result == {-1001111: 1, -1002222: 2}
     fake_client.add_event_handler.assert_called_once()
-    # Inspect the registered event filter — it should be events.NewMessage(chats=[...])
     args, kwargs = fake_client.add_event_handler.call_args
-    # First arg is the handler callable, second is the event builder.
     assert len(args) == 2
-    handler_callable = args[0]
     event_filter = args[1]
-    # event_filter is an events.NewMessage instance. Check its `chats` attribute.
-    assert sorted(event_filter.chats) == [-100222, -100111]
+    # Handler has NO chats filter — filtering is done inside the handler.
+    assert event_filter.chats is None
+
+
+def test_to_marked_chat_id_converts_positive_supergroup_to_marked_peer_id():
+    """Telegram returns positive supergroup IDs from Channel.id (e.g. 1319248631),
+    but Telethon's NewMessage event.chat_id uses the marked peer-id form
+    (-1001319248631). _to_marked_chat_id converts the former to the latter,
+    matching telethon.utils.get_peer_id(PeerChannel(...))."""
+    from telethon.tl.types import PeerChannel
+    from telethon.utils import get_peer_id
+
+    from ingester import live
+
+    positive = 1319248631
+    expected = get_peer_id(PeerChannel(channel_id=positive))
+    assert live._to_marked_chat_id(positive) == expected
+    # Sanity: the marked form is negative and starts with -100.
+    assert expected == -1001319248631
+
+
+def test_load_active_chat_map_returns_marked_peer_ids(monkeypatch):
+    """_load_active_chat_map must return MARKED peer IDs (-100xxxxx) as keys,
+    matching event.chat_id format. Channel.tg_chat_id in the DB is the raw
+    positive supergroup ID — the function must normalize on the way out."""
+    from ingester import live
+
+    # Simulate SELECT result: rows are (Channel.tg_chat_id, Channel.id) tuples
+    # where tg_chat_id is the positive supergroup id.
+    rows = [(1319248631, 1), (1966291562, 2)]
+    result_mock = MagicMock()
+    result_mock.all = MagicMock(return_value=rows)
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result_mock)
+    sf = _session_factory(session)
+
+    result = asyncio.run(live._load_active_chat_map(sf))
+
+    assert result == {-1001319248631: 1, -1001966291562: 2}
 
 
 def test_catchup_channels_fetches_missed_messages(monkeypatch):

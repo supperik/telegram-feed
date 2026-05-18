@@ -120,6 +120,95 @@ def test_join_worker_handles_username_not_occupied(monkeypatch):
     fake_mark_done.assert_not_called()
 
 
+def test_join_worker_registers_new_channel_in_chat_map(monkeypatch):
+    """After a successful join, _handle_one_pending extends the shared
+    chat_map dict so the live NewMessage handler picks up the new channel
+    immediately, without an ingester restart (telegram-feed-3bv).
+
+    The key in chat_map is the MARKED peer id (matching event.chat_id),
+    derived from the raw positive entity.id via _to_marked_chat_id.
+    """
+    from ingester import join_worker as jw
+    from ingester.live import _to_marked_chat_id
+
+    pending = MagicMock(
+        id=42, channel_username="testchan", channel_id=None,
+        requested_by_user_id=11,
+    )
+    # Real Telethon channel entity.id is a positive supergroup id.
+    entity = MagicMock(id=1234567890, username="testchan", title="Test Chan")
+    channel = MagicMock(id=99)
+
+    fake_pop = AsyncMock(side_effect=[pending, None])
+    fake_get_entity = AsyncMock(return_value=entity)
+    fake_upsert_channel = AsyncMock(return_value=channel)
+    fake_add_user_source = AsyncMock(return_value=(True, "pending_backfill"))
+    fake_mark_done = AsyncMock()
+    fake_mark_failed = AsyncMock()
+
+    fake_client = MagicMock()
+    fake_client.get_entity = fake_get_entity
+    async def _client_call(_req):
+        return None
+    fake_client.side_effect = _client_call
+    fake_client.iter_messages = MagicMock(return_value=_async_empty())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.execute = AsyncMock()
+
+    monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
+    monkeypatch.setattr(jw, "upsert_channel", fake_upsert_channel)
+    monkeypatch.setattr(jw, "add_user_source", fake_add_user_source)
+    monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
+    monkeypatch.setattr(jw, "mark_join_failed", fake_mark_failed)
+    monkeypatch.setattr(jw, "JoinChannelRequest", lambda e: ("join", e))
+
+    sf = _fake_session_factory(session)
+    chat_map: dict[int, int] = {}
+
+    asyncio.run(jw._handle_one_pending(
+        fake_client, sf, minio_client=MagicMock(), bucket="media",
+        chat_map=chat_map,
+    ))
+
+    # chat_map mutated in place with marked id -> channel.id.
+    expected_marked = _to_marked_chat_id(1234567890)
+    assert chat_map == {expected_marked: 99}
+
+
+def test_join_worker_does_not_touch_chat_map_on_failed_join(monkeypatch):
+    """If get_entity / join fails, chat_map MUST NOT be mutated — otherwise
+    we'd leak stale entries for channels we never actually joined."""
+    from telethon.errors import UsernameNotOccupiedError
+    from ingester import join_worker as jw
+
+    pending = MagicMock(id=7, channel_username="ghost")
+
+    fake_pop = AsyncMock(return_value=pending)
+    fake_get_entity = AsyncMock(side_effect=UsernameNotOccupiedError(None))
+    fake_mark_failed = AsyncMock()
+
+    fake_client = MagicMock()
+    fake_client.get_entity = fake_get_entity
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+
+    monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
+    monkeypatch.setattr(jw, "mark_join_failed", fake_mark_failed)
+
+    sf = _fake_session_factory(session)
+    chat_map: dict[int, int] = {99: 1}  # pre-existing entry
+
+    asyncio.run(jw._handle_one_pending(
+        fake_client, sf, minio_client=MagicMock(), bucket="media",
+        chat_map=chat_map,
+    ))
+
+    assert chat_map == {99: 1}  # untouched
+
+
 def test_join_worker_handles_floodwait(monkeypatch):
     """FloodWaitError should NOT mark failed; it sleeps then returns (the loop
     will retry on the next iteration with the same row state). We assert
