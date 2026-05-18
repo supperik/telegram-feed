@@ -16,7 +16,7 @@ class UserSourceRow:
     channel_id: int
     channel_username: str | None
     channel_title: str
-    channel_photo_url: str | None
+    channel_photo_storage_key: str | None
     added_at: datetime
     subscription_status: str | None
 
@@ -62,7 +62,7 @@ async def list_user_sources(
             Channel.id,
             Channel.username,
             Channel.title,
-            Channel.photo_url,
+            Channel.photo_storage_key,
             UserSource.added_at,
             ChannelSubscription.status,
         )

@@ -92,3 +92,38 @@ async def download_and_store_video_thumb(
         content_type="image/jpeg",
     )
     return key
+
+
+async def download_and_store_channel_photo(
+    client: TelegramClient,
+    minio_client: Minio,
+    entity: Any,
+    *,
+    channel_id: int,
+    bucket: str,
+) -> str | None:
+    """Download the profile photo of `entity` (a Telegram channel) and
+    upload it to MinIO under a deterministic key. Returns the storage key
+    or None if the channel has no avatar / download failed.
+
+    The key is `channel_photos/{channel_id}.jpg` — one slot per channel.
+    Re-running overwrites the previous bytes, which is the right behaviour
+    when an admin updates the channel's avatar.
+    """
+    data = await client.download_profile_photo(entity, file=bytes)
+    if not data:
+        try:
+            log.warning("photos.no_channel_photo", channel_id=channel_id)
+        except ValueError:
+            pass
+        return None
+
+    key = f"channel_photos/{channel_id}.jpg"
+    minio_client.put_object(
+        bucket,
+        key,
+        BytesIO(data),
+        length=len(data),
+        content_type="image/jpeg",
+    )
+    return key

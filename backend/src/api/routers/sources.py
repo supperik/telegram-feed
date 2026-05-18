@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.channel_photo import channel_photo_url
 from api.deps import get_current_user, get_db
 from api.errors import APIError
 from api.schemas.sources import (
@@ -50,7 +51,8 @@ async def add_source(
         return AddSourceOut(
             status="subscribed",
             channel=ChannelSummary(
-                id=ch.id, username=ch.username, title=ch.title, photo_url=ch.photo_url
+                id=ch.id, username=ch.username, title=ch.title,
+                photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
             ),
         )
 
@@ -81,7 +83,7 @@ async def list_sources(
                     id=row.channel_id,
                     username=row.channel_username,
                     title=row.channel_title,
-                    photo_url=row.channel_photo_url,
+                    photo_url=channel_photo_url(row.channel_id, row.channel_photo_storage_key),
                 ),
                 added_at=row.added_at,
                 subscription_status=row.subscription_status,
@@ -105,7 +107,8 @@ async def queue_status(
         ch = await db.get(Channel, qrow.channel_id)
         if ch is not None:
             channel = ChannelSummary(
-                id=ch.id, username=ch.username, title=ch.title, photo_url=ch.photo_url
+                id=ch.id, username=ch.username, title=ch.title,
+                photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
             )
     return QueueStatusOut(
         queue_id=qrow.id,

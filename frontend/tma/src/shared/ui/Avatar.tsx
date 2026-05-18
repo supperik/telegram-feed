@@ -1,7 +1,18 @@
+import { getTokens } from '@/features/auth/tokenStore';
+
 interface Props {
   photoUrl: string | null;
   title: string;
   size?: number;
+}
+
+function authedImageUrl(url: string | null): string | null {
+  if (!url) return null;
+  if (/^https?:/.test(url)) return url;
+  const tokens = getTokens();
+  if (!tokens) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(tokens.access_token)}`;
 }
 
 const GRADIENTS = [
@@ -22,10 +33,11 @@ function gradientFor(title: string): string {
 export function Avatar({ photoUrl, title, size = 44 }: Props) {
   const initial = title.trim()[0]?.toUpperCase() ?? '?';
   const style = { width: `${size}px`, height: `${size}px` };
-  if (photoUrl) {
+  const resolvedUrl = authedImageUrl(photoUrl);
+  if (resolvedUrl) {
     return (
       <img
-        src={photoUrl}
+        src={resolvedUrl}
         alt=""
         style={style}
         className="shrink-0 rounded-full object-cover"

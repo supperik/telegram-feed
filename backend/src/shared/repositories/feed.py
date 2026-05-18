@@ -38,7 +38,7 @@ class FeedPostRow:
     channel_id: int
     channel_username: str | None
     channel_title: str
-    channel_photo_url: str | None
+    channel_photo_storage_key: str | None
     is_saved: bool
     media: list[FeedMediaRow] = field(default_factory=list)
 
@@ -76,7 +76,7 @@ async def fetch_feed_page(
             Channel.id.label("channel_id"),
             Channel.username,
             Channel.title,
-            Channel.photo_url,
+            Channel.photo_storage_key,
             saved_q.label("is_saved"),
         )
         .join(Channel, Channel.id == Post.channel_id)
@@ -106,7 +106,7 @@ async def fetch_feed_page(
             channel_id=r.channel_id,
             channel_username=r.username,
             channel_title=r.title,
-            channel_photo_url=r.photo_url,
+            channel_photo_storage_key=r.photo_storage_key,
             is_saved=bool(r.is_saved),
         )
         for r in res.all()

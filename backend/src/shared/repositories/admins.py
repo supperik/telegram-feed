@@ -39,7 +39,7 @@ async def list_channels_for_admin(
     stmt = (
         select(
             Channel.id, Channel.tg_chat_id, Channel.username, Channel.title,
-            Channel.description, Channel.photo_url, Channel.posts_count,
+            Channel.description, Channel.photo_storage_key, Channel.posts_count,
             Channel.banned, Channel.banned_reason, Channel.last_post_at,
             Channel.created_at,
             func.coalesce(ChannelSubscription.ref_count, 0).label("ref_count"),

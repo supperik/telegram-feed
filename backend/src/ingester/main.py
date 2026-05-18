@@ -4,6 +4,7 @@ import signal
 import structlog
 
 from ingester.backfill import backfill_recent_media
+from ingester.backfill_channel_photos import backfill_channel_photos
 from ingester.backfill_text_html import backfill_text_html
 from ingester.join_worker import run_join_worker
 from ingester.live import catchup_channels, subscribe_to_active_channels
@@ -78,6 +79,13 @@ async def main() -> None:
         # group but were ingested as separate posts (pre-tg_grouped_id).
         # Idempotent: no-op once every Post has tg_grouped_id resolved.
         await merge_existing_albums(client, session_factory)
+        # Fill Channel.photo_storage_key for active subscriptions whose
+        # avatar was never cached (channels that existed before this
+        # feature shipped). Idempotent across boots.
+        await backfill_channel_photos(
+            client, session_factory, minio_client,
+            bucket=settings.minio_bucket,
+        )
         # Live handler shares a mutable chat_map with the join worker so
         # newly-joined channels receive live updates without a restart
         # (telegram-feed-3bv).

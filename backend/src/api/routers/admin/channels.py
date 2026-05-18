@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.channel_photo import channel_photo_url
 from api.deps import get_current_admin, get_db
 from shared.models import Admin
 from shared.repositories.admins import (
@@ -63,8 +64,25 @@ async def list_channels(
 ) -> ChannelsListResponse:
     rows, next_cursor = await list_channels_for_admin(db, q=q, cursor=cursor, limit=limit)
     return ChannelsListResponse(
-        channels=[ChannelOut(**r) for r in rows],
+        channels=[_channel_out_from_row(r) for r in rows],
         next_cursor=next_cursor,
+    )
+
+
+def _channel_out_from_row(r: dict) -> "ChannelOut":
+    return ChannelOut(
+        id=r["id"],
+        tg_chat_id=r["tg_chat_id"],
+        username=r["username"],
+        title=r["title"],
+        description=r["description"],
+        photo_url=channel_photo_url(r["id"], r["photo_storage_key"]),
+        posts_count=r["posts_count"],
+        ref_count=r["ref_count"],
+        banned=r["banned"],
+        banned_reason=r["banned_reason"],
+        last_post_at=r["last_post_at"],
+        created_at=r["created_at"],
     )
 
 
@@ -90,7 +108,8 @@ async def ban_channel_endpoint(
     return ChannelOut(
         id=updated.id, tg_chat_id=updated.tg_chat_id,
         username=updated.username, title=updated.title,
-        description=updated.description, photo_url=updated.photo_url,
+        description=updated.description,
+        photo_url=channel_photo_url(updated.id, updated.photo_storage_key),
         posts_count=updated.posts_count, ref_count=0,
         banned=updated.banned, banned_reason=updated.banned_reason,
         last_post_at=updated.last_post_at, created_at=updated.created_at,
@@ -119,7 +138,8 @@ async def unban_channel_endpoint(
     return ChannelOut(
         id=updated.id, tg_chat_id=updated.tg_chat_id,
         username=updated.username, title=updated.title,
-        description=updated.description, photo_url=updated.photo_url,
+        description=updated.description,
+        photo_url=channel_photo_url(updated.id, updated.photo_storage_key),
         posts_count=updated.posts_count, ref_count=0,
         banned=updated.banned, banned_reason=updated.banned_reason,
         last_post_at=updated.last_post_at, created_at=updated.created_at,

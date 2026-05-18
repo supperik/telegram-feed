@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.channel_photo import channel_photo_url
 from api.deps import get_current_user, get_db, get_redis
 from api.pagination import FeedCursor
 from api.schemas.feed import FeedChannel, FeedMedia, FeedPage, FeedPost
@@ -54,7 +55,7 @@ async def get_feed(
                 id=row.channel_id,
                 username=row.channel_username,
                 title=row.channel_title,
-                photo_url=row.channel_photo_url,
+                photo_url=channel_photo_url(row.channel_id, row.channel_photo_storage_key),
             ),
             media=[
                 FeedMedia(

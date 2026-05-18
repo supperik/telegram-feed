@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, func  # noqa: F401
 from sqlalchemy.orm import Mapped, mapped_column
 
 from shared.models.base import Base
@@ -14,7 +14,7 @@ class Channel(Base):
     username: Mapped[str | None] = mapped_column(String(255), unique=True)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    photo_url: Mapped[str | None] = mapped_column(String(1024))
+    photo_storage_key: Mapped[str | None] = mapped_column(String(1024))
     posts_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     banned_reason: Mapped[str | None] = mapped_column(Text)

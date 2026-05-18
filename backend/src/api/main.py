@@ -51,6 +51,9 @@ def create_app() -> FastAPI:
     from api.routers import media as media_router
     app.include_router(media_router.router)
 
+    from api.routers import channels as channels_router
+    app.include_router(channels_router.router)
+
     from api.routers.admin.auth import router as admin_auth_router
     app.include_router(admin_auth_router)
 

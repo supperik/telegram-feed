@@ -1,13 +1,34 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setTokens, clearTokens } from '@/features/auth/tokenStore';
 import { Avatar } from '@/shared/ui/Avatar';
 
 describe('Avatar', () => {
-  it('renders <img> when photoUrl is provided', () => {
+  afterEach(() => clearTokens());
+
+  it('renders <img> with absolute photoUrl unchanged', () => {
     render(<Avatar photoUrl="https://x/y.jpg" title="Meduza" />);
     const img = screen.getByRole('presentation');
     expect(img).toHaveAttribute('src', 'https://x/y.jpg');
     expect(img).toHaveAttribute('alt', '');
+  });
+
+  it('appends ?token= to internal /api/ URLs when access token is set', () => {
+    setTokens({
+      access_token: 'abc.def.ghi',
+      refresh_token: 'r',
+      token_type: 'bearer',
+      expires_in: 60,
+    });
+    render(<Avatar photoUrl="/api/channels/7/photo" title="A" />);
+    const img = screen.getByRole('presentation');
+    expect(img.getAttribute('src')).toBe('/api/channels/7/photo?token=abc.def.ghi');
+  });
+
+  it('leaves internal URL unchanged when no token is in store', () => {
+    render(<Avatar photoUrl="/api/channels/7/photo" title="A" />);
+    const img = screen.getByRole('presentation');
+    expect(img).toHaveAttribute('src', '/api/channels/7/photo');
   });
 
   it('renders gradient initial fallback when photoUrl is null', () => {

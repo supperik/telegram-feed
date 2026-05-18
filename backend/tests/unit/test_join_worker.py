@@ -244,3 +244,108 @@ def test_join_worker_handles_floodwait(monkeypatch):
     fake_sleep.assert_awaited_once_with(4)  # 3 + 1
     fake_mark_failed.assert_not_called()
     fake_mark_done.assert_not_called()
+
+
+def test_join_worker_downloads_and_records_channel_photo(monkeypatch):
+    """After a successful join, _handle_one_pending downloads the channel
+    avatar via Telethon and writes the resulting storage key onto the
+    channels row."""
+    from ingester import join_worker as jw
+
+    pending = MagicMock(
+        id=42, channel_username="testchan", channel_id=None,
+        requested_by_user_id=11,
+    )
+    entity = MagicMock(id=-100123, username="testchan", title="Test Chan")
+    channel = MagicMock(id=99)
+
+    fake_pop = AsyncMock(side_effect=[pending, None])
+    fake_get_entity = AsyncMock(return_value=entity)
+    fake_upsert_channel = AsyncMock(return_value=channel)
+    fake_add_user_source = AsyncMock(return_value=(True, "pending_backfill"))
+    fake_mark_done = AsyncMock()
+    fake_mark_failed = AsyncMock()
+    fake_download_channel_photo = AsyncMock(return_value="channel_photos/99.jpg")
+
+    fake_client = MagicMock()
+    fake_client.get_entity = fake_get_entity
+    async def _client_call(_req):
+        return None
+    fake_client.side_effect = _client_call
+    fake_client.iter_messages = MagicMock(return_value=_async_empty())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.execute = AsyncMock()
+
+    monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
+    monkeypatch.setattr(jw, "upsert_channel", fake_upsert_channel)
+    monkeypatch.setattr(jw, "add_user_source", fake_add_user_source)
+    monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
+    monkeypatch.setattr(jw, "mark_join_failed", fake_mark_failed)
+    monkeypatch.setattr(jw, "JoinChannelRequest", lambda e: ("join", e))
+    monkeypatch.setattr(jw, "download_and_store_channel_photo", fake_download_channel_photo)
+
+    sf = _fake_session_factory(session)
+    asyncio.run(jw._handle_one_pending(
+        fake_client, sf, minio_client=MagicMock(), bucket="media",
+    ))
+
+    fake_download_channel_photo.assert_awaited_once()
+    _, kwargs = fake_download_channel_photo.call_args
+    assert kwargs.get("channel_id") == 99
+    # An UPDATE channels SET photo_storage_key was issued.
+    update_calls = [
+        c for c in session.execute.await_args_list
+        if "UPDATE channels" in str(c.args[0])
+        and "photo_storage_key" in str(c.args[0])
+    ]
+    assert update_calls, "expected UPDATE channels SET photo_storage_key"
+
+
+def test_join_worker_swallows_channel_photo_errors(monkeypatch):
+    """A failure downloading the avatar must not break the join — backfill
+    will retry on the next ingester boot."""
+    from ingester import join_worker as jw
+
+    pending = MagicMock(
+        id=42, channel_username="testchan", channel_id=None,
+        requested_by_user_id=11,
+    )
+    entity = MagicMock(id=-100123, username="testchan", title="Test Chan")
+    channel = MagicMock(id=99)
+
+    fake_pop = AsyncMock(side_effect=[pending, None])
+    fake_get_entity = AsyncMock(return_value=entity)
+    fake_upsert_channel = AsyncMock(return_value=channel)
+    fake_add_user_source = AsyncMock(return_value=(True, "pending_backfill"))
+    fake_mark_done = AsyncMock()
+    fake_download_channel_photo = AsyncMock(side_effect=Exception("net flake"))
+
+    fake_client = MagicMock()
+    fake_client.get_entity = fake_get_entity
+    async def _client_call(_req):
+        return None
+    fake_client.side_effect = _client_call
+    fake_client.iter_messages = MagicMock(return_value=_async_empty())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.execute = AsyncMock()
+
+    monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
+    monkeypatch.setattr(jw, "upsert_channel", fake_upsert_channel)
+    monkeypatch.setattr(jw, "add_user_source", fake_add_user_source)
+    monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
+    monkeypatch.setattr(jw, "mark_join_failed", AsyncMock())
+    monkeypatch.setattr(jw, "JoinChannelRequest", lambda e: ("join", e))
+    monkeypatch.setattr(jw, "download_and_store_channel_photo", fake_download_channel_photo)
+
+    sf = _fake_session_factory(session)
+    # Must NOT raise.
+    asyncio.run(jw._handle_one_pending(
+        fake_client, sf, minio_client=MagicMock(), bucket="media",
+    ))
+
+    # Join completed normally.
+    fake_mark_done.assert_awaited_once()

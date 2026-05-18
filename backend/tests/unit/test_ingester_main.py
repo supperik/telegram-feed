@@ -44,6 +44,7 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
          patch("ingester.main.backfill_recent_media", side_effect=_noop), \
          patch("ingester.main.backfill_text_html", side_effect=_noop), \
          patch("ingester.main.merge_existing_albums", side_effect=_noop), \
+         patch("ingester.main.backfill_channel_photos", side_effect=_noop), \
          patch("ingester.main.subscribe_to_active_channels", side_effect=_noop), \
          patch("ingester.main.make_storage_client") as fake_minio_factory, \
          patch("ingester.main.ensure_bucket") as fake_ensure, \

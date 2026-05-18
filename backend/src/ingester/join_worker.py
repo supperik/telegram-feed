@@ -16,7 +16,8 @@ from telethon.tl.functions.channels import JoinChannelRequest
 
 from ingester.live import _to_marked_chat_id
 from ingester.normalize import normalize_message
-from shared.models import ChannelSubscription
+from ingester.photos import download_and_store_channel_photo
+from shared.models import Channel, ChannelSubscription
 from shared.repositories.channels import upsert_channel
 from shared.repositories.join_queue import (
     mark_join_done,
@@ -158,6 +159,30 @@ async def _handle_one_pending(
             tg_chat_id=channel.tg_chat_id,
             username=username,
         )
+
+    # Best-effort: download the channel avatar and store its key. Failures
+    # here must never break the join — the channel still works without a
+    # cached avatar, and `backfill_channel_photos` retries on boot.
+    try:
+        storage_key = await download_and_store_channel_photo(
+            client, minio_client, entity,
+            channel_id=channel.id, bucket=bucket,
+        )
+    except Exception as e:  # noqa: BLE001
+        try:
+            log.warning("join_worker.channel_photo_failed",
+                        channel_id=channel.id, error=str(e))
+        except ValueError:
+            pass
+        storage_key = None
+    if storage_key is not None:
+        async with session_factory() as session:
+            await session.execute(
+                update(Channel)
+                .where(Channel.id == channel.id)
+                .values(photo_storage_key=storage_key)
+            )
+            await session.commit()
 
     # Backfill happens outside the join session — it owns its own sessions.
     await _backfill_channel(

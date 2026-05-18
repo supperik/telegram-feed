@@ -99,6 +99,70 @@ def test_download_returns_none_when_telethon_returns_none():
     fake_minio.put_object.assert_not_called()
 
 
+def test_download_and_store_channel_photo_uploads_with_canonical_key():
+    from ingester.photos import download_and_store_channel_photo
+
+    fake_client = MagicMock()
+    fake_client.download_profile_photo = AsyncMock(return_value=b"avatarbytes")
+    fake_minio = MagicMock()
+    entity = MagicMock(id=12345)
+
+    async def run():
+        return await download_and_store_channel_photo(
+            fake_client, fake_minio, entity, channel_id=42, bucket="media"
+        )
+
+    key = asyncio.run(run())
+
+    assert key == "channel_photos/42.jpg"
+    fake_client.download_profile_photo.assert_awaited_once_with(entity, file=bytes)
+    fake_minio.put_object.assert_called_once()
+    args, kwargs = fake_minio.put_object.call_args
+    assert args[0] == "media"
+    assert args[1] == "channel_photos/42.jpg"
+    assert isinstance(args[2], BytesIO)
+    assert kwargs.get("length") == len(b"avatarbytes")
+    assert kwargs.get("content_type") == "image/jpeg"
+
+
+def test_download_and_store_channel_photo_returns_none_when_no_avatar():
+    """Channel without an avatar: Telethon's download_profile_photo returns
+    None. We treat that as soft failure — no upload, key=None."""
+    from ingester.photos import download_and_store_channel_photo
+
+    fake_client = MagicMock()
+    fake_client.download_profile_photo = AsyncMock(return_value=None)
+    fake_minio = MagicMock()
+    entity = MagicMock(id=99)
+
+    async def run():
+        return await download_and_store_channel_photo(
+            fake_client, fake_minio, entity, channel_id=1, bucket="media"
+        )
+
+    key = asyncio.run(run())
+    assert key is None
+    fake_minio.put_object.assert_not_called()
+
+
+def test_download_and_store_channel_photo_returns_none_for_empty_bytes():
+    from ingester.photos import download_and_store_channel_photo
+
+    fake_client = MagicMock()
+    fake_client.download_profile_photo = AsyncMock(return_value=b"")
+    fake_minio = MagicMock()
+    entity = MagicMock(id=99)
+
+    async def run():
+        return await download_and_store_channel_photo(
+            fake_client, fake_minio, entity, channel_id=1, bucket="media"
+        )
+
+    key = asyncio.run(run())
+    assert key is None
+    fake_minio.put_object.assert_not_called()
+
+
 def test_download_video_thumb_returns_none_when_no_thumbs():
     from ingester.photos import download_and_store_video_thumb
 
