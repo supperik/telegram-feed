@@ -81,21 +81,30 @@ async def _handle_one_pending(
             entity = await client.get_entity(username)
         except UsernameNotOccupiedError:
             await mark_join_failed(
-                session, queue_id=queue_id, error_reason="username_not_occupied"
+                session,
+                queue_id=queue_id,
+                error_code="username_not_occupied",
+                error_reason="username_not_occupied",
             )
             await session.commit()
             log.warning("join_worker.username_not_occupied", username=username, queue_id=queue_id)
             return
         except UsernameInvalidError:
             await mark_join_failed(
-                session, queue_id=queue_id, error_reason="username_invalid"
+                session,
+                queue_id=queue_id,
+                error_code="username_invalid",
+                error_reason="username_invalid",
             )
             await session.commit()
             log.warning("join_worker.username_invalid", username=username, queue_id=queue_id)
             return
         except ChannelPrivateError:
             await mark_join_failed(
-                session, queue_id=queue_id, error_reason="channel_private"
+                session,
+                queue_id=queue_id,
+                error_code="channel_private",
+                error_reason="channel_private",
             )
             await session.commit()
             log.warning("join_worker.channel_private", username=username, queue_id=queue_id)
@@ -118,6 +127,7 @@ async def _handle_one_pending(
             await mark_join_failed(
                 session,
                 queue_id=queue_id,
+                error_code="unknown",
                 error_reason=f"join_failed:{type(e).__name__}",
             )
             await session.commit()

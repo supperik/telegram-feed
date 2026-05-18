@@ -115,11 +115,17 @@ def test_join_queue_pop_and_mark(configured_env, pg_container):
             assert r.channel_id == ch.id
 
             # Mark bravo failed.
-            await mark_join_failed(s, queue_id=popped2.id, error_reason="username_not_occupied")
+            await mark_join_failed(
+                s,
+                queue_id=popped2.id,
+                error_code="username_not_occupied",
+                error_reason="username_not_occupied",
+            )
             await s.commit()
             res = await s.execute(select(ChannelJoinQueue).where(ChannelJoinQueue.id == popped2.id))
             r = res.scalar_one()
             assert r.status == "failed"
+            assert r.error_code == "username_not_occupied"
             assert r.error_reason == "username_not_occupied"
         await engine.dispose()
 

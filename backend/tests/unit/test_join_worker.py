@@ -116,6 +116,7 @@ def test_join_worker_handles_username_not_occupied(monkeypatch):
     fake_mark_failed.assert_awaited_once()
     args, kwargs = fake_mark_failed.call_args
     assert kwargs["queue_id"] == 7
+    assert kwargs["error_code"] == "username_not_occupied"
     assert "username_not_occupied" in kwargs["error_reason"].lower()
     fake_mark_done.assert_not_called()
 
