@@ -1,4 +1,7 @@
+import { useState } from 'react';
+
 import { getTokens } from '@/features/auth/tokenStore';
+import { MediaLightbox } from '@/features/feed/MediaLightbox';
 import type { ChannelSummary, FeedMedia } from '@/shared/api/types';
 
 interface Props {
@@ -16,8 +19,6 @@ function mediaUrl(id: number): string {
     ? `${BASE}/media/${id}?token=${encodeURIComponent(tokens.access_token)}`
     : `${BASE}/media/${id}`;
 }
-const tgPostUrl = (channel: ChannelSummary, msgId: number): string | null =>
-  channel.username ? `tg://resolve?domain=${channel.username}&post=${msgId}` : null;
 
 type Variant = 'one' | 'two' | 'three' | 'four' | 'five';
 
@@ -37,27 +38,41 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   five:  'grid grid-cols-3 grid-rows-2 [&>*:nth-child(1)]:col-span-2 [&>*:nth-child(2)]:col-span-1 [&>*:nth-child(n+3)]:aspect-square',
 };
 
-function Tile({ m, channel, tgMessageId, overlay }: { m: FeedMedia; channel: ChannelSummary; tgMessageId: number; overlay?: string | null }) {
+interface TileProps {
+  m: FeedMedia;
+  overlay?: string | null;
+  onOpen?: () => void;
+}
+
+function Tile({ m, overlay, onOpen }: TileProps) {
   if (m.type === 'photo' || m.type === 'video') {
-    const img = (
+    const content = (
       <div className="relative h-full w-full overflow-hidden bg-black/5">
         <img src={mediaUrl(m.id)} alt="" loading="lazy" className="h-full w-full object-cover" />
         {m.type === 'video' ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/15">
             <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
               ▶ {m.duration ? `${m.duration}s` : 'Video'}
             </span>
           </div>
         ) : null}
         {overlay ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-semibold text-white">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-semibold text-white">
             {overlay}
           </div>
         ) : null}
       </div>
     );
-    const link = tgPostUrl(channel, tgMessageId);
-    return m.type === 'video' && link ? <a href={link} className="block h-full w-full">{img}</a> : img;
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label="Open media"
+        className="block h-full w-full p-0 text-left"
+      >
+        {content}
+      </button>
+    );
   }
   return (
     <div className="bg-secondary p-3 text-sm text-hint">Документ — открыть в Telegram.</div>
@@ -65,21 +80,32 @@ function Tile({ m, channel, tgMessageId, overlay }: { m: FeedMedia; channel: Cha
 }
 
 export function MediaGallery({ media, channel, tgMessageId }: Props) {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   if (media.length === 0) return null;
   const visible = media.slice(0, 5);
   const overflow = media.length - visible.length;
   const variant = variantFor(visible.length);
   return (
-    <div data-grid={variant} className={`mt-1 gap-0.5 bg-black/10 ${VARIANT_CLASSES[variant]}`}>
-      {visible.map((m, i) => (
-        <Tile
-          key={m.id}
-          m={m}
+    <>
+      <div data-grid={variant} className={`mt-1 gap-0.5 bg-black/10 ${VARIANT_CLASSES[variant]}`}>
+        {visible.map((m, i) => (
+          <Tile
+            key={m.id}
+            m={m}
+            overlay={i === visible.length - 1 && overflow > 0 ? `+${overflow}` : null}
+            onOpen={() => setOpenIndex(i)}
+          />
+        ))}
+      </div>
+      {openIndex !== null ? (
+        <MediaLightbox
+          media={media}
           channel={channel}
           tgMessageId={tgMessageId}
-          overlay={i === visible.length - 1 && overflow > 0 ? `+${overflow}` : null}
+          openIndex={openIndex}
+          onClose={() => setOpenIndex(null)}
         />
-      ))}
-    </div>
+      ) : null}
+    </>
   );
 }
