@@ -53,4 +53,11 @@ describe('PostCard', () => {
     render(<PostCard post={post} />, { wrapper: wrap() });
     expect(screen.getByText('M')).toBeInTheDocument();
   });
+
+  it('renders as a card (rounded background container)', () => {
+    const { container } = render(<PostCard post={post} />, { wrapper: wrap() });
+    const article = container.querySelector('article');
+    expect(article).toHaveClass('bg-secondary');
+    expect(article).toHaveClass('rounded-2xl');
+  });
 });
