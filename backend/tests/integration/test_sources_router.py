@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import text
 
 from shared.auth.jwt import encode_access
 from shared.models import Channel, UserHiddenChannel
@@ -20,7 +21,7 @@ async def test_post_sources_existing_channel(async_client, db_session, seed_user
     await db_session.commit()
 
     r = await async_client.post(
-        "/sources", json={"username": "meduzaproject"}, headers=_auth(user_id)
+        "/sources", json={"input": "meduzaproject"}, headers=_auth(user_id)
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -34,7 +35,7 @@ async def test_post_sources_enqueues_unknown(async_client, db_session, seed_user
     user_id = await seed_user(tg_user_id=12)
 
     r = await async_client.post(
-        "/sources", json={"username": "freshchannel"}, headers=_auth(user_id)
+        "/sources", json={"input": "freshchannel"}, headers=_auth(user_id)
     )
     assert r.status_code == 202, r.text
     body = r.json()
@@ -46,16 +47,16 @@ async def test_post_sources_enqueues_unknown(async_client, db_session, seed_user
 @pytest.mark.asyncio
 async def test_get_sources_returns_user_list(async_client, db_session, seed_user) -> None:
     user_id = await seed_user(tg_user_id=13)
-    ch = Channel(tg_chat_id=33333, username="news", title="News")
+    ch = Channel(tg_chat_id=33333, username="newschan", title="News")
     db_session.add(ch)
     await db_session.commit()
-    await async_client.post("/sources", json={"username": "news"}, headers=_auth(user_id))
+    await async_client.post("/sources", json={"input": "newschan"}, headers=_auth(user_id))
 
     r = await async_client.get("/sources", headers=_auth(user_id))
     assert r.status_code == 200, r.text
     items = r.json()["items"]
     assert len(items) == 1
-    assert items[0]["channel"]["username"] == "news"
+    assert items[0]["channel"]["username"] == "newschan"
 
 
 @pytest.mark.integration
@@ -63,7 +64,7 @@ async def test_get_sources_returns_user_list(async_client, db_session, seed_user
 async def test_queue_status_returns_pending_then_done(async_client, db_session, seed_user) -> None:
     user_id = await seed_user(tg_user_id=14)
     r = await async_client.post(
-        "/sources", json={"username": "fresh"}, headers=_auth(user_id)
+        "/sources", json={"input": "freshzz"}, headers=_auth(user_id)
     )
     qid = r.json()["queue_id"]
 
@@ -73,7 +74,7 @@ async def test_queue_status_returns_pending_then_done(async_client, db_session, 
 
     # Simulate ingester completing the request.
     from shared.models import ChannelJoinQueue, Channel
-    ch = Channel(tg_chat_id=44444, username="fresh", title="Fresh")
+    ch = Channel(tg_chat_id=44444, username="freshzz", title="Fresh")
     db_session.add(ch)
     await db_session.commit()
     qrow = await db_session.get(ChannelJoinQueue, qid)
@@ -83,17 +84,17 @@ async def test_queue_status_returns_pending_then_done(async_client, db_session, 
 
     r2 = await async_client.get(f"/sources/queue/{qid}", headers=_auth(user_id))
     assert r2.json()["status"] == "done"
-    assert r2.json()["channel"]["username"] == "fresh"
+    assert r2.json()["channel"]["username"] == "freshzz"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_delete_source_decrements_ref(async_client, db_session, seed_user) -> None:
     user_id = await seed_user(tg_user_id=15)
-    ch = Channel(tg_chat_id=55555, username="bye", title="Bye")
+    ch = Channel(tg_chat_id=55555, username="byebye", title="Bye")
     db_session.add(ch)
     await db_session.commit()
-    await async_client.post("/sources", json={"username": "bye"}, headers=_auth(user_id))
+    await async_client.post("/sources", json={"input": "byebye"}, headers=_auth(user_id))
 
     r = await async_client.delete(f"/sources/{ch.id}", headers=_auth(user_id))
     assert r.status_code == 204
@@ -122,3 +123,119 @@ async def test_hide_unknown_source_returns_404(async_client, seed_user) -> None:
     r = await async_client.post("/sources/999999999/hide", headers=_auth(uid))
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "channel_not_found"
+
+
+# -----------------------------------------------------------------------------
+# T4: private invite dispatch + parser-based input handling
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_private_invite_queued(async_client, db_session, seed_user):
+    user_id = await seed_user(tg_user_id=2025001)
+    headers = _auth(user_id)
+    resp = await async_client.post(
+        "/sources", json={"input": "https://t.me/+abcDEF_123"}, headers=headers
+    )
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["status"] == "queued"
+    assert body["channel"] is None
+    queue_id = body["queue_id"]
+    row = (await db_session.execute(
+        text("SELECT kind, invite_hash, channel_username, status FROM channel_join_queue WHERE id = :id"),
+        {"id": queue_id},
+    )).mappings().one()
+    assert row["kind"] == "private_invite"
+    assert row["invite_hash"] == "abcDEF_123"
+    assert row["channel_username"] is None
+    assert row["status"] == "pending"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_legacy_joinchat_queued(async_client, db_session, seed_user):
+    user_id = await seed_user(tg_user_id=2025002)
+    headers = _auth(user_id)
+    resp = await async_client.post(
+        "/sources", json={"input": "https://t.me/joinchat/abc-DEF_123"}, headers=headers
+    )
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["status"] == "queued"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_invalid_input(async_client, db_session, seed_user):
+    user_id = await seed_user(tg_user_id=2025003)
+    headers = _auth(user_id)
+    resp = await async_client.post("/sources", json={"input": "!!! garbage !!!"}, headers=headers)
+    assert resp.status_code == 400
+    body = resp.json()
+    # API uses APIError which surfaces as body["error"]["code"]
+    assert (
+        body.get("error", {}).get("code") == "invalid_source_input"
+        or body.get("detail", {}).get("code") == "invalid_source_input"
+        or body.get("detail") == "invalid_source_input"
+        or "invalid_source_input" in str(body)
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_public_username_via_url(async_client, db_session, seed_user):
+    """Regression: t.me/<username> URL also accepted as public."""
+    user_id = await seed_user(tg_user_id=2025004)
+    headers = _auth(user_id)
+    resp = await async_client.post(
+        "/sources", json={"input": "https://t.me/somechannel"}, headers=headers
+    )
+    assert resp.status_code in (200, 202)
+    if resp.status_code == 202:
+        body = resp.json()
+        queue_id = body["queue_id"]
+        row = (await db_session.execute(
+            text("SELECT kind, channel_username FROM channel_join_queue WHERE id = :id"),
+            {"id": queue_id},
+        )).mappings().one()
+        assert row["kind"] == "public_username"
+        assert row["channel_username"] == "somechannel"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_queue_status_pending_approval(async_client, db_session, seed_user):
+    user_id = await seed_user(tg_user_id=2025005)
+    queue_id = (await db_session.execute(
+        text("""
+            INSERT INTO channel_join_queue (kind, invite_hash, requested_by_user_id, status)
+            VALUES ('private_invite', 'abc12345', :uid, 'pending_approval')
+            RETURNING id
+        """),
+        {"uid": user_id},
+    )).scalar_one()
+    await db_session.commit()
+    resp = await async_client.get(f"/sources/queue/{queue_id}", headers=_auth(user_id))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "pending_approval"
+    assert body["error_code"] is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_queue_status_failed_with_error_code(async_client, db_session, seed_user):
+    user_id = await seed_user(tg_user_id=2025006)
+    queue_id = (await db_session.execute(
+        text("""
+            INSERT INTO channel_join_queue (kind, invite_hash, requested_by_user_id, status, error_code)
+            VALUES ('private_invite', 'def67890', :uid, 'failed', 'invite_expired')
+            RETURNING id
+        """),
+        {"uid": user_id},
+    )).scalar_one()
+    await db_session.commit()
+    resp = await async_client.get(f"/sources/queue/{queue_id}", headers=_auth(user_id))
+    assert resp.status_code == 200
+    assert resp.json()["error_code"] == "invite_expired"

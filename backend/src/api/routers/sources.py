@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user, get_db
 from api.errors import APIError
+from api.parse_source_input import ParseError, parse_source_input
 from api.schemas.sources import (
     AddSourceIn,
     AddSourceOut,
@@ -39,7 +40,25 @@ async def add_source(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AddSourceOut | JSONResponse:
-    username = body.username.lower()
+    try:
+        parsed = parse_source_input(body.input)
+    except ParseError as exc:
+        raise APIError(
+            code="invalid_source_input",
+            message="Invalid source input",
+            status_code=400,
+        ) from exc
+
+    if parsed.kind == "public_username":
+        assert parsed.username is not None  # narrowed by parser
+        return await _add_public_source(db, user, username=parsed.username)
+    assert parsed.invite_hash is not None  # narrowed by parser
+    return await _add_private_source(db, user, invite_hash=parsed.invite_hash)
+
+
+async def _add_public_source(
+    db: AsyncSession, user: User, *, username: str
+) -> AddSourceOut | JSONResponse:
     res = await db.execute(select(Channel).where(Channel.username == username))
     ch = res.scalar_one_or_none()
     if ch is not None:
@@ -55,7 +74,26 @@ async def add_source(
         )
 
     queue_row = ChannelJoinQueue(
+        kind="public_username",
         channel_username=username,
+        requested_by_user_id=user.id,
+        status="pending",
+    )
+    db.add(queue_row)
+    await db.commit()
+    await db.refresh(queue_row)
+    return JSONResponse(
+        status_code=202,
+        content={"status": "queued", "channel": None, "queue_id": queue_row.id},
+    )
+
+
+async def _add_private_source(
+    db: AsyncSession, user: User, *, invite_hash: str
+) -> JSONResponse:
+    queue_row = ChannelJoinQueue(
+        kind="private_invite",
+        invite_hash=invite_hash,
         requested_by_user_id=user.id,
         status="pending",
     )
@@ -110,6 +148,7 @@ async def queue_status(
     return QueueStatusOut(
         queue_id=qrow.id,
         status=qrow.status,  # type: ignore[arg-type]
+        error_code=qrow.error_code,
         error_reason=qrow.error_reason,
         channel=channel,
     )
