@@ -1,3 +1,4 @@
+import { getTokens } from '@/features/auth/tokenStore';
 import type { ChannelSummary, FeedMedia } from '@/shared/api/types';
 
 interface Props {
@@ -7,7 +8,14 @@ interface Props {
 }
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
-const mediaUrl = (id: number) => `${BASE}/media/${id}`;
+// Native <img> tags can't send custom headers, so we pass the JWT via
+// query param. /api/media/{id} accepts either ?token=... or Authorization.
+function mediaUrl(id: number): string {
+  const tokens = getTokens();
+  return tokens
+    ? `${BASE}/media/${id}?token=${encodeURIComponent(tokens.access_token)}`
+    : `${BASE}/media/${id}`;
+}
 const tgPostUrl = (channel: ChannelSummary, msgId: number): string | null =>
   channel.username ? `tg://resolve?domain=${channel.username}&post=${msgId}` : null;
 

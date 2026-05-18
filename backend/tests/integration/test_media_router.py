@@ -82,3 +82,56 @@ async def test_media_returns_404_when_storage_key_missing(
     r = await async_client.get(f"/media/{media.id}", headers=_auth(uid))
     assert r.status_code == 404
     fake.get_object.assert_not_called()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_media_accepts_jwt_via_query_token(
+    async_client, db_session, seed_user, monkeypatch
+) -> None:
+    """Native <img src="/api/media/{id}"> can't send Authorization header,
+    so the endpoint must accept the JWT via ?token=... query param.
+    Regression: telegram-feed-xk8."""
+    uid = await seed_user(tg_user_id=63)
+    ch = Channel(tg_chat_id=120003, username="q", title="Q")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=3, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    media = Media(post_id=p.id, type="photo", storage_key="photos/3/3.jpg", position=0)
+    db_session.add(media)
+    await db_session.commit()
+
+    payload = b"\xff\xd8\xff\xe0querytokenbytes"
+    fake = _fake_minio_client(payload)
+    monkeypatch.setattr("api.routers.media.make_storage_client", lambda: fake)
+
+    token = encode_access(user_id=uid, secret=SECRET, ttl_seconds=60)
+    # No Authorization header — token in query only.
+    r = await async_client.get(f"/media/{media.id}?token={token}")
+
+    assert r.status_code == 200
+    assert r.content == payload
+    assert r.headers["content-type"] == "image/jpeg"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_media_returns_401_without_any_token(
+    async_client, db_session, seed_user
+) -> None:
+    """No header and no query token → unauthenticated."""
+    uid = await seed_user(tg_user_id=64)
+    ch = Channel(tg_chat_id=120004, username="z", title="Z")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=4, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    media = Media(post_id=p.id, type="photo", storage_key="photos/4/4.jpg", position=0)
+    db_session.add(media)
+    await db_session.commit()
+
+    r = await async_client.get(f"/media/{media.id}")
+    assert r.status_code == 401
