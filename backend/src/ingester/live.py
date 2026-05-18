@@ -66,7 +66,7 @@ async def on_new_message(
             await session.commit()
             return  # duplicate
 
-        await _download_and_set_storage_keys(
+        await download_and_set_storage_keys(
             session,
             msg=msg,
             channel_id=channel_id,
@@ -79,7 +79,7 @@ async def on_new_message(
         await session.commit()
 
 
-async def _download_and_set_storage_keys(
+async def download_and_set_storage_keys(
     session: AsyncSession,
     *,
     msg: Any,
@@ -212,7 +212,7 @@ async def catchup_channels(
                 new_id = await upsert_post(session, post_values, media_values)
                 if new_id is not None:
                     count += 1
-                    await _download_and_set_storage_keys(
+                    await download_and_set_storage_keys(
                         session,
                         msg=msg,
                         channel_id=channel_id,

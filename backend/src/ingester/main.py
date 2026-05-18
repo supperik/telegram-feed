@@ -3,6 +3,7 @@ import signal
 
 import structlog
 
+from ingester.backfill import backfill_recent_media
 from ingester.join_worker import run_join_worker
 from ingester.live import catchup_channels, subscribe_to_active_channels
 from ingester.refcount_sweep import run_refcount_sweep
@@ -62,6 +63,12 @@ async def main() -> None:
         # Catch up BEFORE subscribing live so we don't miss anything.
         await catchup_channels(client, session_factory, minio_client,
                                 bucket=settings.minio_bucket)
+        # Self-healing: re-fetch the last N messages for channels that
+        # still have Media rows with storage_key=NULL (orphans from when
+        # catchup didn't download media; see telegram-feed-pj0).
+        # Idempotent: targets query is empty once everything is filled in.
+        await backfill_recent_media(client, session_factory, minio_client,
+                                     bucket=settings.minio_bucket, limit=50)
         await subscribe_to_active_channels(client, session_factory,
                                             minio_client=minio_client,
                                             bucket=settings.minio_bucket)
