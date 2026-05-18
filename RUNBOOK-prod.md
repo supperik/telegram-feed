@@ -156,29 +156,28 @@ TG_PROXY_SECRET=<32-символьный hex secret из @MTProxybot или mtg>
 
 Если MTProxy недоступен или капризничает (FakeTLS-варианты иногда не работают с Telethon), подними локальный xray-sidecar — он заворачивает SOCKS5 → VLESS-туннель → твой сервер → Telegram. Это более устойчивый путь: TLS-маскированный трафик сложнее блокировать DPI.
 
-1. Подложи свой клиентский xray-конфиг в `infra/xray/config.json` (с твоим VLESS uuid/host/transport):
-   ```bash
-   nano infra/xray/config.json
-   # ВНИМАНИЕ: этот файл — секрет. В git не попадает (.gitignore).
-   chmod 600 infra/xray/config.json
-   ```
-   Шаблон лежит в `infra/xray/config.example.json`. Если у тебя VLESS-конфиг в формате `vless://` URL — сконвертируй вручную или через open-source конвертер (`vless2xray`, `xtools`).
+Конфиг подаётся целиком через `vless://` URL — отдельный init-контейнер (`xray-init`) парсит его в xray config.json до старта sidecar'a. Никакого ручного JSON.
 
-2. В `.env` (вместо `TG_PROXY_TYPE=mtproxy`):
+1. В `.env` (вместо `TG_PROXY_TYPE=mtproxy`):
    ```
    TG_PROXY_TYPE=socks5
    TG_PROXY_HOST=xray
    TG_PROXY_PORT=1080
    TG_PROXY_SECRET=
+   TG_VLESS_URL=vless://<uuid>@<host>:<port>?security=tls&sni=...&type=tcp#<name>
    ```
+   Поддерживаемые транспорты: `type=tcp` (с `security=tls` или `security=reality`) и `type=xhttp` (с TLS). Если URL формата другого транспорта (например `type=ws` или `type=grpc`) — расширь `infra/xray/parse_vless.py` или используй fallback (см. ниже).
 
-3. Перезапуск:
+2. Перезапуск:
    ```bash
-   dcp up -d xray
+   dcp up -d xray-init xray
    dcp restart ingester
+   dcp logs xray-init    # должно быть "wrote xray config to /etc/xray/config.json", без ошибок
    dcp logs ingester | tail -30
    ```
-   В логах появится `ingester.connected user_id=...`. Если до этого был fresh deploy (или после `dcp down -v`) — сначала повтори шаг 8 (интерактивный SMS-логин).
+   В логах ingester появится `ingester.connected user_id=...`. Если до этого был fresh deploy (или после `dcp down -v`) — сначала повтори шаг 8 (интерактивный SMS-логин).
+
+**Fallback (если transport нестандартный):** в репо лежит шаблон `infra/xray/config.example.json`. Скопируй в `infra/xray/config.json` (gitignored), правь руками, и в `docker-compose.yml` поменяй сервис `xray` обратно на bind-mount `./infra/xray/config.json:/etc/xray/config.json:ro`, убрав сервис `xray-init` и shared volume `xray_config`.
 
 Защити файл:
 ```bash

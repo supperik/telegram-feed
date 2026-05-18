@@ -58,11 +58,22 @@ services:
       timeout: 3s
       retries: 10
 
+  xray-init:
+    image: python:3.12-alpine
+    restart: "no"
+    env_file: .env
+    volumes:
+      - ./infra/xray/parse_vless.py:/parse_vless.py:ro
+      - xray_config:/etc/xray
+    command: ["python", "/parse_vless.py"]
+
   xray:
     image: ghcr.io/xtls/xray-core:25.12.8
     restart: unless-stopped
+    depends_on:
+      xray-init: { condition: service_completed_successfully }
     volumes:
-      - ./infra/xray/config.json:/etc/xray/config.json:ro
+      - xray_config:/etc/xray:ro
     command: ["run", "-config", "/etc/xray/config.json"]
 
   ingester:
@@ -95,3 +106,4 @@ volumes:
   redis_data:
   minio_data:
   tg_session:
+  xray_config:
