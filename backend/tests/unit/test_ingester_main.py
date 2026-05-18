@@ -39,6 +39,7 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
     with patch("ingester.main.make_client", return_value=fake_client), \
          patch("ingester.main.run_forever", side_effect=_noop), \
          patch("ingester.main.run_join_worker", side_effect=_noop), \
+         patch("ingester.main.run_approval_poller", side_effect=_noop), \
          patch("ingester.main.run_refcount_sweep", side_effect=_noop), \
          patch("ingester.main.catchup_channels", side_effect=_noop), \
          patch("ingester.main.subscribe_to_active_channels", side_effect=_noop), \

@@ -3,6 +3,7 @@ import signal
 
 import structlog
 
+from ingester.approval_poller import run_approval_poller
 from ingester.join_worker import run_join_worker
 from ingester.live import catchup_channels, subscribe_to_active_channels
 from ingester.refcount_sweep import run_refcount_sweep
@@ -68,6 +69,12 @@ async def main() -> None:
         await asyncio.gather(
             run_join_worker(client, session_factory,
                             minio_client=minio_client, bucket=settings.minio_bucket),
+            run_approval_poller(
+                client, session_factory,
+                minio_client=minio_client, bucket=settings.minio_bucket,
+                poll_interval_s=settings.approval_poll_interval_s,
+                timeout_days=settings.approval_timeout_days,
+            ),
             run_refcount_sweep(client, session_factory),
             run_forever(),
         )
