@@ -25,6 +25,7 @@ class Post(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("channels.id"), nullable=False)
     tg_message_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    tg_grouped_id: Mapped[int | None] = mapped_column(BigInteger)
     text: Mapped[str | None] = mapped_column(Text)
     text_html: Mapped[str | None] = mapped_column(Text)
     posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

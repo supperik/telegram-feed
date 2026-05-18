@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from telethon import TelegramClient, events
 from minio import Minio
 
-from ingester.normalize import normalize_message
+from ingester.normalize import normalize_album, normalize_message
 from ingester.photos import download_and_store_photo, download_and_store_video_thumb
 from shared.models import Channel, ChannelSubscription, Media, Post
 from shared.repositories.posts import upsert_post
@@ -58,6 +58,11 @@ async def on_new_message(
         return
 
     msg = event.message
+    if getattr(msg, "grouped_id", None) is not None:
+        # Part of a media group — handled by on_new_album to keep the
+        # whole album as one Post with N Media rows.
+        return
+
     post_values, media_values = normalize_message(msg, channel_id)
 
     async with session_factory() as session:
@@ -76,6 +81,70 @@ async def on_new_message(
             minio_client=minio_client,
             bucket=bucket,
         )
+        await session.commit()
+
+
+async def on_new_album(
+    event: Any,
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    minio_client: Minio,
+    client: TelegramClient,
+    channel_id_map: dict[int, int],
+    bucket: str,
+) -> None:
+    """Handle an events.Album: fold N messages into one Post with N Media,
+    then download every media file."""
+    chat_id = event.chat_id
+    channel_id = channel_id_map.get(chat_id)
+    if channel_id is None:
+        return
+
+    messages = list(event.messages)
+    if not messages:
+        return
+
+    post_values, media_values = normalize_album(messages, channel_id)
+
+    async with session_factory() as session:
+        post_id = await upsert_post(session, post_values, media_values)
+        if post_id is None:
+            await session.commit()
+            return
+
+        # Download one file per source message, in the same order as media.
+        ordered_msgs = sorted(messages, key=lambda m: int(m.id))
+        for media, msg in zip(media_values, ordered_msgs):
+            mtype = media["type"]
+            storage_key: str | None = None
+            try:
+                if mtype == "photo":
+                    storage_key = await download_and_store_photo(
+                        client, minio_client, msg,
+                        channel_id=channel_id, bucket=bucket,
+                    )
+                elif mtype == "video":
+                    storage_key = await download_and_store_video_thumb(
+                        client, minio_client, msg,
+                        channel_id=channel_id, bucket=bucket,
+                    )
+            except Exception as e:  # noqa: BLE001
+                try:
+                    log.warning("live.album_download_failed",
+                                channel_id=channel_id, msg_id=msg.id,
+                                media_type=mtype, error=str(e))
+                except ValueError:
+                    pass
+
+            if storage_key is not None:
+                await session.execute(
+                    update(Media)
+                    .where(
+                        Media.post_id == post_id,
+                        Media.tg_file_id == media["tg_file_id"],
+                    )
+                    .values(storage_key=storage_key)
+                )
         await session.commit()
 
 
@@ -146,7 +215,16 @@ async def subscribe_to_active_channels(
         channel_id_map=chat_map,
         bucket=bucket,
     )
+    album_handler = partial(
+        _dispatch_album,
+        session_factory=session_factory,
+        minio_client=minio_client,
+        client=client,
+        channel_id_map=chat_map,
+        bucket=bucket,
+    )
     client.add_event_handler(handler, events.NewMessage(chats=chat_ids))
+    client.add_event_handler(album_handler, events.Album(chats=chat_ids))
     try:
         log.info("live.subscribed", count=len(chat_ids))
     except ValueError:
@@ -157,6 +235,17 @@ async def subscribe_to_active_channels(
 async def _dispatch(event, *, session_factory, minio_client, client, channel_id_map, bucket):
     """Adapter that drops the implicit `event` positional arg into on_new_message kwargs."""
     await on_new_message(
+        event,
+        session_factory=session_factory,
+        minio_client=minio_client,
+        client=client,
+        channel_id_map=channel_id_map,
+        bucket=bucket,
+    )
+
+
+async def _dispatch_album(event, *, session_factory, minio_client, client, channel_id_map, bucket):
+    await on_new_album(
         event,
         session_factory=session_factory,
         minio_client=minio_client,
@@ -205,8 +294,41 @@ async def catchup_channels(
                 pass
             continue
 
-        count = 0
+        collected: list[Any] = []
         async for msg in client.iter_messages(entity, min_id=max_known, limit=limit):
+            collected.append(msg)
+
+        albums: dict[int, list[Any]] = {}
+        solos: list[Any] = []
+        for m in collected:
+            gid = getattr(m, "grouped_id", None)
+            if gid is not None:
+                albums.setdefault(int(gid), []).append(m)
+            else:
+                solos.append(m)
+
+        count = 0
+        for gid, msgs in albums.items():
+            post_values, media_values = normalize_album(msgs, channel_id)
+            async with session_factory() as session:
+                new_id = await upsert_post(session, post_values, media_values)
+                if new_id is not None:
+                    count += 1
+                    ordered = sorted(msgs, key=lambda mm: int(mm.id))
+                    for media, msg in zip(media_values, ordered):
+                        await _download_one_and_update_storage_key(
+                            session,
+                            msg=msg,
+                            channel_id=channel_id,
+                            post_id=new_id,
+                            media=media,
+                            client=client,
+                            minio_client=minio_client,
+                            bucket=bucket,
+                        )
+                await session.commit()
+
+        for msg in solos:
             post_values, media_values = normalize_message(msg, channel_id)
             async with session_factory() as session:
                 new_id = await upsert_post(session, post_values, media_values)
@@ -227,3 +349,48 @@ async def catchup_channels(
             log.info("live.catchup_done", channel_id=channel_id, new=count)
         except ValueError:
             pass
+
+
+async def _download_one_and_update_storage_key(
+    session: AsyncSession,
+    *,
+    msg: Any,
+    channel_id: int,
+    post_id: int,
+    media: dict,
+    client: TelegramClient,
+    minio_client: Minio,
+    bucket: str,
+) -> None:
+    """Download a single media file (photo or video thumb) and write its
+    storage_key onto the matching Media row. Tolerant of per-file errors."""
+    mtype = media["type"]
+    storage_key: str | None = None
+    try:
+        if mtype == "photo":
+            storage_key = await download_and_store_photo(
+                client, minio_client, msg,
+                channel_id=channel_id, bucket=bucket,
+            )
+        elif mtype == "video":
+            storage_key = await download_and_store_video_thumb(
+                client, minio_client, msg,
+                channel_id=channel_id, bucket=bucket,
+            )
+    except Exception as e:  # noqa: BLE001
+        try:
+            log.warning("live.download_failed",
+                        channel_id=channel_id, msg_id=msg.id,
+                        media_type=mtype, error=str(e))
+        except ValueError:
+            pass
+
+    if storage_key is not None:
+        await session.execute(
+            update(Media)
+            .where(
+                Media.post_id == post_id,
+                Media.tg_file_id == media["tg_file_id"],
+            )
+            .values(storage_key=storage_key)
+        )

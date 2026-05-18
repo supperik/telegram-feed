@@ -47,6 +47,7 @@ def test_on_new_message_normalizes_inserts_and_downloads_photo(monkeypatch):
 
     event = MagicMock()
     event.message = MagicMock(id=42)
+    event.message.grouped_id = None
     event.chat_id = -100200
 
     channel_id_map = {-100200: 7}
@@ -95,6 +96,7 @@ def test_on_new_message_skips_duplicate(monkeypatch):
 
     event = MagicMock()
     event.message = MagicMock(id=1)
+    event.message.grouped_id = None
     event.chat_id = -100200
 
     async def run():
@@ -139,15 +141,12 @@ def test_subscribe_to_active_channels_loads_map_and_attaches_handler(monkeypatch
     result = asyncio.run(run())
 
     assert result == {-100111: 1, -100222: 2}
-    fake_client.add_event_handler.assert_called_once()
-    # Inspect the registered event filter — it should be events.NewMessage(chats=[...])
-    args, kwargs = fake_client.add_event_handler.call_args
-    # First arg is the handler callable, second is the event builder.
-    assert len(args) == 2
-    handler_callable = args[0]
-    event_filter = args[1]
-    # event_filter is an events.NewMessage instance. Check its `chats` attribute.
-    assert sorted(event_filter.chats) == [-100222, -100111]
+    # Two handlers attached: NewMessage + Album (the latter folds media
+    # groups into a single Post).
+    assert fake_client.add_event_handler.call_count == 2
+    event_filters = [c.args[1] for c in fake_client.add_event_handler.call_args_list]
+    new_msg_filter = next(f for f in event_filters if type(f).__name__ == "NewMessage")
+    assert sorted(new_msg_filter.chats) == [-100222, -100111]
 
 
 def test_catchup_channels_fetches_missed_messages(monkeypatch):
@@ -160,6 +159,7 @@ def test_catchup_channels_fetches_missed_messages(monkeypatch):
     async def gen():
         for mid in (10, 11, 12):
             m = MagicMock(id=mid)
+            m.grouped_id = None
             yield m
 
     fake_client.get_entity = AsyncMock(return_value=MagicMock())
@@ -208,8 +208,12 @@ def test_catchup_channels_downloads_media_for_new_posts(monkeypatch):
     fake_client = MagicMock()
 
     async def gen():
-        yield MagicMock(id=10)
-        yield MagicMock(id=11)
+        m1 = MagicMock(id=10)
+        m1.grouped_id = None
+        m2 = MagicMock(id=11)
+        m2.grouped_id = None
+        yield m1
+        yield m2
 
     fake_client.get_entity = AsyncMock(return_value=MagicMock())
     fake_client.iter_messages = MagicMock(return_value=gen())
@@ -267,7 +271,9 @@ def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
     fake_client = MagicMock()
 
     async def gen():
-        yield MagicMock(id=10)
+        m = MagicMock(id=10)
+        m.grouped_id = None
+        yield m
 
     fake_client.get_entity = AsyncMock(return_value=MagicMock())
     fake_client.iter_messages = MagicMock(return_value=gen())
@@ -304,3 +310,219 @@ def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
 
     fake_download_photo.assert_not_awaited()
     fake_download_thumb.assert_not_awaited()
+
+
+def test_on_new_message_skips_grouped_messages(monkeypatch):
+    """Album parts are handled by on_new_album. on_new_message must not
+    create individual Posts for them — otherwise an album of N items
+    yields N separate cards in the feed."""
+    from ingester import live
+
+    fake_normalize = MagicMock()
+    fake_upsert = AsyncMock()
+    monkeypatch.setattr(live, "normalize_message", fake_normalize)
+    monkeypatch.setattr(live, "upsert_post", fake_upsert)
+
+    session = MagicMock()
+    sf = _session_factory(session)
+
+    event = MagicMock()
+    event.message = MagicMock(id=42)
+    event.message.grouped_id = 999  # part of an album
+    event.chat_id = -100200
+
+    async def run():
+        await live.on_new_message(
+            event,
+            session_factory=sf,
+            minio_client=MagicMock(),
+            client=MagicMock(),
+            channel_id_map={-100200: 7},
+            bucket="media",
+        )
+
+    asyncio.run(run())
+
+    fake_normalize.assert_not_called()
+    fake_upsert.assert_not_awaited()
+
+
+def test_on_new_album_normalizes_inserts_and_downloads(monkeypatch):
+    """An events.Album event with 3 photo messages becomes a single Post
+    with 3 Media (positions 0,1,2). Each media file is downloaded."""
+    from ingester import live
+
+    msgs = [MagicMock(id=100), MagicMock(id=101), MagicMock(id=102)]
+    for m in msgs:
+        m.grouped_id = 42
+
+    fake_normalize_album = MagicMock(return_value=(
+        {"channel_id": 7, "tg_message_id": 100, "tg_grouped_id": 42,
+         "text": "alb", "text_html": "alb", "posted_at": None,
+         "edited_at": None, "views": None, "forwards": None},
+        [
+            {"type": "photo", "storage_key": None, "tg_file_id": "p1",
+             "width": 1, "height": 1, "duration": None,
+             "size_bytes": None, "position": 0},
+            {"type": "photo", "storage_key": None, "tg_file_id": "p2",
+             "width": 1, "height": 1, "duration": None,
+             "size_bytes": None, "position": 1},
+            {"type": "photo", "storage_key": None, "tg_file_id": "p3",
+             "width": 1, "height": 1, "duration": None,
+             "size_bytes": None, "position": 2},
+        ],
+    ))
+    fake_upsert = AsyncMock(return_value=500)
+    fake_download_photo = AsyncMock(return_value="photos/7/100_p.jpg")
+
+    monkeypatch.setattr(live, "normalize_album", fake_normalize_album)
+    monkeypatch.setattr(live, "upsert_post", fake_upsert)
+    monkeypatch.setattr(live, "download_and_store_photo", fake_download_photo)
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    sf = _session_factory(session)
+
+    event = MagicMock()
+    event.messages = msgs
+    event.chat_id = -100200
+
+    async def run():
+        await live.on_new_album(
+            event,
+            session_factory=sf,
+            minio_client=MagicMock(),
+            client=MagicMock(),
+            channel_id_map={-100200: 7},
+            bucket="media",
+        )
+
+    asyncio.run(run())
+
+    fake_normalize_album.assert_called_once_with(msgs, 7)
+    fake_upsert.assert_awaited_once()
+    # Three photos → three downloads.
+    assert fake_download_photo.await_count == 3
+
+
+def test_on_new_album_unknown_chat_id_is_noop(monkeypatch):
+    from ingester import live
+
+    fake_normalize_album = MagicMock()
+    monkeypatch.setattr(live, "normalize_album", fake_normalize_album)
+
+    event = MagicMock()
+    event.messages = [MagicMock(id=1)]
+    event.chat_id = -100200  # not in map
+
+    async def run():
+        await live.on_new_album(
+            event,
+            session_factory=_session_factory(MagicMock()),
+            minio_client=MagicMock(),
+            client=MagicMock(),
+            channel_id_map={},
+            bucket="media",
+        )
+
+    asyncio.run(run())
+
+    fake_normalize_album.assert_not_called()
+
+
+def test_catchup_groups_album_messages_into_single_post(monkeypatch):
+    """Three messages with the same grouped_id arrive via iter_messages →
+    catchup folds them into a single normalize_album call (one Post, 3 media)."""
+    from ingester import live
+
+    fake_client = MagicMock()
+    fake_client.get_entity = AsyncMock(return_value=MagicMock())
+
+    async def gen():
+        m1 = MagicMock(id=20)
+        m1.grouped_id = 42
+        m2 = MagicMock(id=21)
+        m2.grouped_id = 42
+        m3 = MagicMock(id=22)
+        m3.grouped_id = 42
+        solo = MagicMock(id=23)
+        solo.grouped_id = None
+        yield m1
+        yield m2
+        yield m3
+        yield solo
+
+    fake_client.iter_messages = MagicMock(return_value=gen())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    targets_result = MagicMock()
+    targets_result.all = MagicMock(return_value=[(7, -100, 5)])
+    session.execute = AsyncMock(return_value=targets_result)
+    sf = _session_factory(session)
+
+    fake_normalize_msg = MagicMock(return_value=(
+        {"channel_id": 7, "tg_message_id": 23, "tg_grouped_id": None,
+         "text": None, "text_html": None, "posted_at": None,
+         "edited_at": None, "views": None, "forwards": None},
+        [],
+    ))
+    fake_normalize_album = MagicMock(return_value=(
+        {"channel_id": 7, "tg_message_id": 20, "tg_grouped_id": 42,
+         "text": "alb", "text_html": "alb", "posted_at": None,
+         "edited_at": None, "views": None, "forwards": None},
+        [],
+    ))
+    fake_upsert = AsyncMock(return_value=200)
+    monkeypatch.setattr(live, "normalize_message", fake_normalize_msg)
+    monkeypatch.setattr(live, "normalize_album", fake_normalize_album)
+    monkeypatch.setattr(live, "upsert_post", fake_upsert)
+
+    async def run():
+        await live.catchup_channels(
+            fake_client, sf, MagicMock(), bucket="media", limit=200
+        )
+
+    asyncio.run(run())
+
+    # Album call: once with all three messages (any order).
+    fake_normalize_album.assert_called_once()
+    album_msgs = fake_normalize_album.call_args.args[0]
+    assert sorted(m.id for m in album_msgs) == [20, 21, 22]
+    # Solo call: once with the single message id=23.
+    fake_normalize_msg.assert_called_once()
+    assert fake_normalize_msg.call_args.args[0].id == 23
+    # Two upserts total: one album + one solo.
+    assert fake_upsert.await_count == 2
+
+
+def test_subscribe_to_active_channels_registers_album_handler_too(monkeypatch):
+    """Both events.NewMessage and events.Album handlers must be registered
+    so albums become single posts with N media."""
+    from telethon import events
+    from ingester import live
+
+    fake_client = MagicMock()
+    fake_client.add_event_handler = MagicMock()
+    monkeypatch.setattr(live, "_load_active_chat_map",
+                        AsyncMock(return_value={-100: 1}))
+
+    sf = _session_factory(MagicMock())
+
+    async def run():
+        await live.subscribe_to_active_channels(
+            fake_client, sf, minio_client=MagicMock(), bucket="media"
+        )
+
+    asyncio.run(run())
+
+    # Two calls: one for NewMessage, one for Album.
+    assert fake_client.add_event_handler.call_count == 2
+    event_filters = [c.args[1] for c in fake_client.add_event_handler.call_args_list]
+    builders = {type(f).__name__ for f in event_filters}
+    assert "NewMessage" in builders
+    assert "Album" in builders
+    for ef in event_filters:
+        assert isinstance(ef, (events.NewMessage, events.Album))
+        assert sorted(ef.chats) == [-100]

@@ -83,6 +83,156 @@ def test_normalize_html_specials_in_plain_text_are_escaped():
     assert post["text_html"] == "&lt;script&gt;alert(1)&lt;/script&gt;"
 
 
+def test_normalize_message_with_grouped_id_sets_field():
+    """A single message that has grouped_id (e.g. arrived alone) still
+    carries the tg_grouped_id into the post dict so subsequent siblings
+    can find it."""
+    from ingester.normalize import normalize_message
+
+    msg = _fake_msg(60, text="cap")
+    msg.grouped_id = 999
+    post, _ = normalize_message(msg, channel_id=7)
+    assert post["tg_grouped_id"] == 999
+    assert post["tg_message_id"] == 60
+
+
+def test_normalize_album_three_photos_one_post_three_media():
+    from ingester.normalize import normalize_album
+
+    p1 = MagicMock(id=1000)
+    p1.sizes = [MagicMock(w=800, h=600)]
+    p2 = MagicMock(id=1001)
+    p2.sizes = [MagicMock(w=1200, h=900)]
+    p3 = MagicMock(id=1002)
+    p3.sizes = [MagicMock(w=400, h=300)]
+
+    m1 = _fake_msg(100, text="album caption", photo=p1)
+    m1.grouped_id = 42
+    m2 = _fake_msg(101, photo=p2)
+    m2.grouped_id = 42
+    m2.message = None
+    m2.text = None
+    m3 = _fake_msg(102, photo=p3)
+    m3.grouped_id = 42
+    m3.message = None
+    m3.text = None
+
+    post, media = normalize_album([m1, m2, m3], channel_id=7)
+
+    assert post["channel_id"] == 7
+    assert post["tg_message_id"] == 100  # min id in group
+    assert post["tg_grouped_id"] == 42
+    assert post["text"] == "album caption"
+    assert post["text_html"] == "album caption"
+    assert len(media) == 3
+    assert media[0]["tg_file_id"] == str(p1.id)
+    assert media[0]["position"] == 0
+    assert media[1]["position"] == 1
+    assert media[2]["position"] == 2
+    # widths preserved
+    assert media[0]["width"] == 800
+    assert media[1]["width"] == 1200
+
+
+def test_normalize_album_caption_picked_from_first_nonempty():
+    """If the first message has no caption but the second does, the
+    second is used."""
+    from ingester.normalize import normalize_album
+
+    p1 = MagicMock(id=10)
+    p1.sizes = []
+    p2 = MagicMock(id=11)
+    p2.sizes = []
+
+    m1 = _fake_msg(200, photo=p1)
+    m1.message = None
+    m1.text = None
+    m1.grouped_id = 7
+    m2 = _fake_msg(201, text="caption on second", photo=p2)
+    m2.grouped_id = 7
+
+    post, _ = normalize_album([m1, m2], channel_id=3)
+
+    assert post["text"] == "caption on second"
+
+
+def test_normalize_album_orders_media_by_msg_id():
+    """If the input list is unsorted, media is still positioned by msg.id."""
+    from ingester.normalize import normalize_album
+
+    p_low = MagicMock(id=10)
+    p_low.sizes = []
+    p_high = MagicMock(id=20)
+    p_high.sizes = []
+
+    m_high = _fake_msg(900, photo=p_high)
+    m_high.grouped_id = 5
+    m_high.message = None
+    m_high.text = None
+    m_low = _fake_msg(800, text="cap", photo=p_low)
+    m_low.grouped_id = 5
+
+    post, media = normalize_album([m_high, m_low], channel_id=1)
+
+    assert post["tg_message_id"] == 800
+    assert media[0]["tg_file_id"] == "10"  # photo from msg.id=800 first
+    assert media[0]["position"] == 0
+    assert media[1]["tg_file_id"] == "20"
+    assert media[1]["position"] == 1
+
+
+def test_normalize_album_text_html_uses_entities_from_caption_message():
+    """Entities are picked from the same message whose caption is chosen."""
+    from telethon.tl.types import MessageEntityBold
+
+    from ingester.normalize import normalize_album
+
+    p1 = MagicMock(id=1)
+    p1.sizes = []
+    p2 = MagicMock(id=2)
+    p2.sizes = []
+
+    m1 = _fake_msg(300, photo=p1)
+    m1.message = None
+    m1.text = None
+    m1.grouped_id = 88
+    m2 = _fake_msg(301, text="hello bold", photo=p2)
+    m2.entities = [MessageEntityBold(offset=6, length=4)]
+    m2.grouped_id = 88
+
+    post, _ = normalize_album([m1, m2], channel_id=2)
+
+    assert post["text"] == "hello bold"
+    assert post["text_html"] == "hello <strong>bold</strong>"
+
+
+def test_normalize_album_video_and_photo_mix():
+    """Album supports mixed photo/video media."""
+    from ingester.normalize import normalize_album
+
+    p = MagicMock(id=11)
+    p.sizes = []
+    v = MagicMock(id=22)
+    v.duration = 5
+    v.size = 1024
+
+    m1 = _fake_msg(400, text="mixed", photo=p)
+    m1.grouped_id = 1
+    m2 = _fake_msg(401, video=v)
+    m2.file = MagicMock(width=1280, height=720)
+    m2.message = None
+    m2.text = None
+    m2.grouped_id = 1
+
+    post, media = normalize_album([m1, m2], channel_id=4)
+
+    assert len(media) == 2
+    assert media[0]["type"] == "photo"
+    assert media[1]["type"] == "video"
+    assert media[1]["duration"] == 5
+    assert post["tg_grouped_id"] == 1
+
+
 def test_normalize_edited():
     from ingester.normalize import normalize_message
 

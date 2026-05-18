@@ -7,6 +7,7 @@ from ingester.backfill import backfill_recent_media
 from ingester.backfill_text_html import backfill_text_html
 from ingester.join_worker import run_join_worker
 from ingester.live import catchup_channels, subscribe_to_active_channels
+from ingester.merge_existing_albums import merge_existing_albums
 from ingester.refcount_sweep import run_refcount_sweep
 from ingester.session import default_sessions_dir
 from shared.config import get_settings
@@ -73,6 +74,10 @@ async def main() -> None:
         # Refill text_html for posts ingested before this column was wired
         # to entities_to_html. Idempotent: no-op once everything is set.
         await backfill_text_html(client, session_factory)
+        # Merge sibling Post-rows that belonged to the same Telegram media
+        # group but were ingested as separate posts (pre-tg_grouped_id).
+        # Idempotent: no-op once every Post has tg_grouped_id resolved.
+        await merge_existing_albums(client, session_factory)
         await subscribe_to_active_channels(client, session_factory,
                                             minio_client=minio_client,
                                             bucket=settings.minio_bucket)
