@@ -38,11 +38,49 @@ def test_normalize_plain_text():
     assert post["channel_id"] == 7
     assert post["tg_message_id"] == 42
     assert post["text"] == "hello world"
+    assert post["text_html"] == "hello world"
     assert post["posted_at"] == datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
     assert post["edited_at"] is None
     assert post["views"] == 100
     assert post["forwards"] == 5
     assert media == []
+
+
+def test_normalize_none_text_yields_none_text_html():
+    from ingester.normalize import normalize_message
+
+    msg = _fake_msg(48)
+    msg.message = None
+    msg.text = None
+    post, _ = normalize_message(msg, channel_id=7)
+    assert post["text"] is None
+    assert post["text_html"] is None
+
+
+def test_normalize_entities_produce_text_html():
+    from telethon.tl.types import MessageEntityBold, MessageEntityTextUrl
+
+    from ingester.normalize import normalize_message
+
+    msg = _fake_msg(49, text="hello bold link")
+    msg.entities = [
+        MessageEntityBold(offset=6, length=4),
+        MessageEntityTextUrl(offset=11, length=4, url="https://example.com"),
+    ]
+    post, _ = normalize_message(msg, channel_id=7)
+    assert post["text"] == "hello bold link"
+    assert "<strong>bold</strong>" in post["text_html"]
+    assert 'href="https://example.com"' in post["text_html"]
+    assert ">link</a>" in post["text_html"]
+
+
+def test_normalize_html_specials_in_plain_text_are_escaped():
+    from ingester.normalize import normalize_message
+
+    msg = _fake_msg(50, text="<script>alert(1)</script>")
+    post, _ = normalize_message(msg, channel_id=7)
+    assert post["text"] == "<script>alert(1)</script>"
+    assert post["text_html"] == "&lt;script&gt;alert(1)&lt;/script&gt;"
 
 
 def test_normalize_edited():

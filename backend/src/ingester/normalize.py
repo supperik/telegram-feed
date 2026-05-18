@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ingester.text_html import entities_to_html
+
 
 def _largest_photo_size(photo: Any) -> tuple[int | None, int | None]:
     sizes = getattr(photo, "sizes", None) or []
@@ -34,11 +36,12 @@ def _largest_photo_size(photo: Any) -> tuple[int | None, int | None]:
 
 def normalize_message(msg: Any, channel_id: int) -> tuple[dict, list[dict]]:
     text = getattr(msg, "message", None) or getattr(msg, "text", None)
+    entities = getattr(msg, "entities", None)
     post = {
         "channel_id": channel_id,
         "tg_message_id": int(msg.id),
         "text": text,
-        "text_html": None,
+        "text_html": entities_to_html(text, entities),
         "posted_at": msg.date,
         "edited_at": getattr(msg, "edit_date", None),
         "views": getattr(msg, "views", None),

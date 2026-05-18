@@ -1,5 +1,6 @@
 import { ChannelHeader } from '@/features/feed/ChannelHeader';
 import { MediaGallery } from '@/features/feed/MediaGallery';
+import { PostText } from '@/features/feed/PostText';
 import { HideButton } from '@/features/posts/HideButton';
 import { SaveButton } from '@/features/posts/SaveButton';
 import { EyeIcon, SendIcon, ShareIcon } from '@/shared/ui/icons';
@@ -25,11 +26,7 @@ export function PostCard({ post }: Props) {
   return (
     <article className="mx-3 mb-3 overflow-hidden rounded-2xl bg-secondary shadow-card">
       <ChannelHeader channel={post.channel} postedAt={post.posted_at} />
-      {post.text ? (
-        <div className="whitespace-pre-wrap break-words px-3.5 pb-2 pt-1 text-[14.5px] leading-relaxed">
-          {post.text}
-        </div>
-      ) : null}
+      <PostText text={post.text} textHtml={post.text_html} />
       <MediaGallery media={post.media} channel={post.channel} tgMessageId={post.tg_message_id} />
       <footer className="flex flex-wrap items-center gap-0.5 px-1.5 pb-2 pt-1">
         {post.views !== null ? (

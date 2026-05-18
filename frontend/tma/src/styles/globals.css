@@ -40,3 +40,65 @@
 html, body, #root { height: 100%; margin: 0; }
 #root { display: flex; flex-direction: column; background: var(--tg-bg); color: var(--tg-text); }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+
+/* Inline rendering of Telegram message entities (see PostText). */
+.post-text a {
+  color: var(--tg-link);
+  text-decoration: none;
+}
+.post-text a:active {
+  opacity: 0.7;
+}
+.post-text a.tg-mention {
+  color: var(--tg-link);
+  font-weight: 500;
+}
+.post-text .tg-hashtag {
+  color: var(--tg-link);
+}
+.post-text strong { font-weight: 600; }
+.post-text em { font-style: italic; }
+.post-text u { text-decoration: underline; }
+.post-text s { text-decoration: line-through; opacity: 0.75; }
+.post-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--app-link-soft);
+  padding: 0.05em 0.35em;
+  border-radius: 4px;
+}
+.post-text pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--app-link-soft);
+  padding: 8px 10px;
+  margin: 6px 0;
+  border-radius: 8px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.post-text pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.post-text blockquote {
+  margin: 4px 0;
+  padding: 2px 10px;
+  border-left: 3px solid var(--tg-link);
+  color: var(--tg-text);
+  opacity: 0.85;
+}
+.post-text .tg-spoiler {
+  background: currentColor;
+  color: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.post-text .tg-spoiler:hover,
+.post-text .tg-spoiler:focus,
+.post-text .tg-spoiler.is-revealed {
+  color: inherit;
+  background: var(--app-link-soft);
+}
