@@ -1,36 +1,40 @@
 import type { ChannelSummary } from '@/shared/api/types';
+import { Avatar } from '@/shared/ui/Avatar';
+import { MoreVerticalIcon } from '@/shared/ui/icons';
 
 interface Props {
   channel: ChannelSummary;
   postedAt: string;
+  onMore?: () => void;
 }
 
 function formatPostedAt(iso: string): string {
   const d = new Date(iso);
   const diffSec = (Date.now() - d.getTime()) / 1000;
-  if (diffSec < 60) return 'just now';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 60) return 'только что';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} мин`;
+  if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)} ч`;
   return d.toLocaleDateString();
 }
 
-export function ChannelHeader({ channel, postedAt }: Props) {
-  const initial = channel.title[0]?.toUpperCase() ?? '?';
+export function ChannelHeader({ channel, postedAt, onMore }: Props) {
   return (
-    <header className="flex items-center gap-3 px-3 pt-3">
-      {channel.photo_url ? (
-        <img src={channel.photo_url} alt="" className="size-9 rounded-full object-cover" />
-      ) : (
-        <div className="size-9 rounded-full bg-secondary text-center text-sm leading-9">
-          {initial}
-        </div>
-      )}
-      <div className="flex flex-col">
-        <span className="text-sm font-medium">{channel.title}</span>
-        <span className="text-xs text-hint">
+    <header className="flex items-center gap-3 px-3.5 pt-3 pb-1.5">
+      <Avatar photoUrl={channel.photo_url} title={channel.title} size={44} />
+      <div className="min-w-0 flex-1 leading-tight">
+        <div className="truncate text-[15px] font-semibold">{channel.title}</div>
+        <div className="mt-0.5 text-xs text-hint">
           {channel.username ? `@${channel.username}` : '—'} · {formatPostedAt(postedAt)}
-        </span>
+        </div>
       </div>
+      <button
+        type="button"
+        aria-label="More options"
+        onClick={onMore}
+        className="-mr-2 flex h-9 w-9 items-center justify-center rounded-full text-hint active:bg-black/5"
+      >
+        <MoreVerticalIcon size={20} />
+      </button>
     </header>
   );
 }

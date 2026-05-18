@@ -43,4 +43,14 @@ describe('PostCard', () => {
     const link = screen.getByRole('link', { name: /open in telegram/i });
     expect(link).toHaveAttribute('href', 'tg://resolve?domain=meduza&post=42');
   });
+
+  it('renders MoreVertical icon button in header', () => {
+    render(<PostCard post={post} />, { wrapper: wrap() });
+    expect(screen.getByRole('button', { name: /more options/i })).toBeInTheDocument();
+  });
+
+  it('uses gradient avatar fallback when photo_url is null', () => {
+    render(<PostCard post={post} />, { wrapper: wrap() });
+    expect(screen.getByText('M')).toBeInTheDocument();
+  });
 });
