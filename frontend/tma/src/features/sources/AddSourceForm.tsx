@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAddSource } from '@/features/sources/useAddSource';
-import { Button } from '@/shared/ui/Button';
 
 const USERNAME_RE = /^[A-Za-z0-9_]+$/;
 
@@ -14,38 +13,45 @@ export function AddSourceForm() {
     submit(cleaned);
   };
 
+  const disabled = state.kind === 'submitting' || state.kind === 'queued';
+
   return (
-    <div className="border-b border-hint/10 p-3">
-      <div className="flex gap-2">
+    <div className="mx-3 mt-3 rounded-2xl bg-secondary p-3 shadow-card">
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 select-none items-center justify-center text-base font-semibold text-hint">@</span>
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="username (e.g. meduzaproject)"
-          className="flex-1 rounded bg-secondary px-3 py-2 text-sm"
+          placeholder="username канала (например, meduzaproject)"
+          className="flex-1 bg-transparent text-[15px] outline-none placeholder:text-hint"
           autoCapitalize="off"
           autoCorrect="off"
+          spellCheck={false}
         />
-        <Button onClick={handle} disabled={state.kind === 'submitting' || state.kind === 'queued'}>
-          {state.kind === 'submitting' ? '…' : 'Add'}
-        </Button>
+        <button
+          type="button"
+          onClick={handle}
+          disabled={disabled}
+          className="rounded-full bg-button px-4 py-2 text-[13px] font-semibold text-button-text transition active:opacity-90 disabled:opacity-45"
+        >
+          {state.kind === 'submitting' ? '…' : 'Добавить'}
+        </button>
       </div>
-      <div className="mt-2 text-xs">
+      <div className="mt-2 px-1 text-xs">
         {state.kind === 'queued' ? (
-          <span className="text-hint">Queued ({state.status})…</span>
+          <span className="text-hint">Подгружаем посты ({state.status})…</span>
         ) : null}
         {state.kind === 'subscribed' ? (
           <button
+            type="button"
             className="text-link"
-            onClick={() => {
-              setValue('');
-              reset();
-            }}
+            onClick={() => { setValue(''); reset(); }}
           >
-            Subscribed — add another
+            Готово — добавить ещё канал
           </button>
         ) : null}
         {state.kind === 'failed' ? (
-          <span className="text-red-500">{state.message}</span>
+          <span className="text-danger">{state.message}</span>
         ) : null}
       </div>
     </div>

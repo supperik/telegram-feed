@@ -31,8 +31,8 @@ describe('AddSourceForm', () => {
     );
     render(<AddSourceForm />, { wrapper: wrap() });
     await userEvent.type(screen.getByPlaceholderText(/username/i), '@meduzaproject');
-    await userEvent.click(screen.getByRole('button', { name: /add/i }));
-    await screen.findByText(/subscribed/i);
+    await userEvent.click(screen.getByRole('button', { name: /добавить/i }));
+    await screen.findByText(/готово/i);
     expect(received).toBe('meduzaproject');
   });
 
@@ -58,7 +58,7 @@ describe('AddSourceForm', () => {
     );
     render(<AddSourceForm />, { wrapper: wrap() });
     await userEvent.type(screen.getByPlaceholderText(/username/i), 'doesnotexist');
-    await userEvent.click(screen.getByRole('button', { name: /add/i }));
+    await userEvent.click(screen.getByRole('button', { name: /добавить/i }));
     await screen.findByText(/username_not_occupied/i, undefined, { timeout: 8000 });
   });
 });
