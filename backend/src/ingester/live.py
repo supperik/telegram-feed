@@ -66,40 +66,64 @@ async def on_new_message(
             await session.commit()
             return  # duplicate
 
-        # For each new media row, attempt the download and update storage_key.
-        for media in media_values:
-            mtype = media["type"]
-            storage_key: str | None = None
-            try:
-                if mtype == "photo":
-                    storage_key = await download_and_store_photo(
-                        client, minio_client, msg,
-                        channel_id=channel_id, bucket=bucket,
-                    )
-                elif mtype == "video":
-                    storage_key = await download_and_store_video_thumb(
-                        client, minio_client, msg,
-                        channel_id=channel_id, bucket=bucket,
-                    )
-                # documents: no download for MVP.
-            except Exception as e:  # noqa: BLE001
-                try:
-                    log.warning("live.download_failed",
-                                channel_id=channel_id, msg_id=msg.id,
-                                media_type=mtype, error=str(e))
-                except ValueError:
-                    pass  # stdout-cache issue under pytest
-
-            if storage_key is not None:
-                await session.execute(
-                    update(Media)
-                    .where(
-                        Media.post_id == new_post_id,
-                        Media.tg_file_id == media["tg_file_id"],
-                    )
-                    .values(storage_key=storage_key)
-                )
+        await _download_and_set_storage_keys(
+            session,
+            msg=msg,
+            channel_id=channel_id,
+            new_post_id=new_post_id,
+            media_values=media_values,
+            client=client,
+            minio_client=minio_client,
+            bucket=bucket,
+        )
         await session.commit()
+
+
+async def _download_and_set_storage_keys(
+    session: AsyncSession,
+    *,
+    msg: Any,
+    channel_id: int,
+    new_post_id: int,
+    media_values: list[dict],
+    client: TelegramClient,
+    minio_client: Minio,
+    bucket: str,
+) -> None:
+    """Download photo / video-thumb for each new media row and UPDATE
+    storage_key. Tolerant of per-media failures."""
+    for media in media_values:
+        mtype = media["type"]
+        storage_key: str | None = None
+        try:
+            if mtype == "photo":
+                storage_key = await download_and_store_photo(
+                    client, minio_client, msg,
+                    channel_id=channel_id, bucket=bucket,
+                )
+            elif mtype == "video":
+                storage_key = await download_and_store_video_thumb(
+                    client, minio_client, msg,
+                    channel_id=channel_id, bucket=bucket,
+                )
+            # documents: no download for MVP.
+        except Exception as e:  # noqa: BLE001
+            try:
+                log.warning("live.download_failed",
+                            channel_id=channel_id, msg_id=msg.id,
+                            media_type=mtype, error=str(e))
+            except ValueError:
+                pass  # stdout-cache issue under pytest
+
+        if storage_key is not None:
+            await session.execute(
+                update(Media)
+                .where(
+                    Media.post_id == new_post_id,
+                    Media.tg_file_id == media["tg_file_id"],
+                )
+                .values(storage_key=storage_key)
+            )
 
 
 async def subscribe_to_active_channels(
@@ -188,6 +212,16 @@ async def catchup_channels(
                 new_id = await upsert_post(session, post_values, media_values)
                 if new_id is not None:
                     count += 1
+                    await _download_and_set_storage_keys(
+                        session,
+                        msg=msg,
+                        channel_id=channel_id,
+                        new_post_id=new_id,
+                        media_values=media_values,
+                        client=client,
+                        minio_client=minio_client,
+                        bucket=bucket,
+                    )
                 await session.commit()
         try:
             log.info("live.catchup_done", channel_id=channel_id, new=count)
