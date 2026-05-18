@@ -34,7 +34,7 @@ class ChannelJoinQueue(Base):
         CheckConstraint(
             "(kind = 'public_username' AND channel_username IS NOT NULL AND invite_hash IS NULL) "
             "OR (kind = 'private_invite' AND invite_hash IS NOT NULL)",
-            name="ck_channel_join_queue_kind_chk",
+            name="kind_chk",
         ),
     )
 
