@@ -43,4 +43,27 @@ describe('PostCard', () => {
     const link = screen.getByRole('link', { name: /open in telegram/i });
     expect(link).toHaveAttribute('href', 'tg://resolve?domain=meduza&post=42');
   });
+
+  it('renders MoreVertical icon button in header', () => {
+    render(<PostCard post={post} />, { wrapper: wrap() });
+    expect(screen.getByRole('button', { name: /more options/i })).toBeInTheDocument();
+  });
+
+  it('uses gradient avatar fallback when photo_url is null', () => {
+    render(<PostCard post={post} />, { wrapper: wrap() });
+    expect(screen.getByText('M')).toBeInTheDocument();
+  });
+
+  it('renders as a card (rounded background container)', () => {
+    const { container } = render(<PostCard post={post} />, { wrapper: wrap() });
+    const article = container.querySelector('article');
+    expect(article).toHaveClass('bg-secondary');
+    expect(article).toHaveClass('rounded-2xl');
+  });
+
+  it('SaveButton reflects is_saved=true via aria-pressed', () => {
+    const saved = { ...post, is_saved: true };
+    render(<PostCard post={saved} />, { wrapper: wrap() });
+    expect(screen.getByRole('button', { name: /unsave/i })).toHaveAttribute('aria-pressed', 'true');
+  });
 });
