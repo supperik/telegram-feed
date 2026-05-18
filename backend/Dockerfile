@@ -16,6 +16,7 @@ RUN poetry install --only main --no-root
 
 FROM deps AS runtime
 COPY backend/src ./src
+COPY backend/scripts ./scripts
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/migrations ./migrations
 ENV PYTHONPATH=/app/src
