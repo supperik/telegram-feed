@@ -152,6 +152,34 @@ TG_PROXY_SECRET=<32-символьный hex secret из @MTProxybot или mtg>
 ```
 Оставь `TG_PROXY_TYPE` пустым (по умолчанию) — Telethon идёт напрямую к Telegram-DC.
 
+**Альтернатива — VLESS sidecar (если у тебя есть свой VLESS-сервер):**
+
+Если MTProxy недоступен или капризничает (FakeTLS-варианты иногда не работают с Telethon), подними локальный xray-sidecar — он заворачивает SOCKS5 → VLESS-туннель → твой сервер → Telegram. Это более устойчивый путь: TLS-маскированный трафик сложнее блокировать DPI.
+
+1. Подложи свой клиентский xray-конфиг в `infra/xray/config.json` (с твоим VLESS uuid/host/transport):
+   ```bash
+   nano infra/xray/config.json
+   # ВНИМАНИЕ: этот файл — секрет. В git не попадает (.gitignore).
+   chmod 600 infra/xray/config.json
+   ```
+   Шаблон лежит в `infra/xray/config.example.json`. Если у тебя VLESS-конфиг в формате `vless://` URL — сконвертируй вручную или через open-source конвертер (`vless2xray`, `xtools`).
+
+2. В `.env` (вместо `TG_PROXY_TYPE=mtproxy`):
+   ```
+   TG_PROXY_TYPE=socks5
+   TG_PROXY_HOST=xray
+   TG_PROXY_PORT=1080
+   TG_PROXY_SECRET=
+   ```
+
+3. Перезапуск:
+   ```bash
+   dcp up -d xray
+   dcp restart ingester
+   dcp logs ingester | tail -30
+   ```
+   В логах появится `ingester.connected user_id=...`. Если до этого был fresh deploy (или после `dcp down -v`) — сначала повтори шаг 8 (интерактивный SMS-логин).
+
 Защити файл:
 ```bash
 chmod 600 .env
@@ -437,7 +465,8 @@ dcp down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session
 ### Ingester падает с `Connection to Telegram failed N time(s)` / `TimeoutError` на Attempt 1..6
 - VDS-провайдер режет MTProto-IP (`149.154.0.0/16`). Проверь: `curl -v --max-time 6 https://149.154.167.51:443` висит, а `curl https://1.1.1.1` — отвечает.
 - Решение: настрой MTProxy через переменные `TG_PROXY_*` в `.env` (см. шаг 4), затем `dcp restart ingester`.
-- Альтернатива: мигрировать VDS к провайдеру вне зоны блокировки (Hetzner / Contabo / OVH).
+- Альтернатива №1 (рекомендуется): подними **xray-sidecar с VLESS outbound** (см. шаг 4 — раздел «Альтернатива — VLESS sidecar»). TLS-маскированный туннель устойчивее MTProxy к DPI.
+- Альтернатива №2: мигрировать VDS к провайдеру вне зоны блокировки (Hetzner / Contabo / OVH).
 
 ### Ingester циклится с запросом кода SMS
 - Сессия не сохранилась. Запусти интерактивный шаг 8 заново, **дай 10+ секунд** после `ingester.connected` перед Ctrl+C.
