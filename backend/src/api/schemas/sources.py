@@ -1,18 +1,23 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class AddSourceIn(BaseModel):
-    username: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_]+$")
+    input: str = Field(min_length=1, max_length=256)
 
 
 class ChannelSummary(BaseModel):
     id: int
     username: str | None
     title: str
-    photo_url: str | None
+    photo_url: str | None = None
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def is_private(self) -> bool:
+        return self.username is None
 
 
 class AddSourceOut(BaseModel):
@@ -27,11 +32,15 @@ class SourceListItem(BaseModel):
     subscription_status: str | None
 
 
+QueueStatusValue = Literal["pending", "in_progress", "pending_approval", "done", "failed"]
+
+
 class QueueStatusOut(BaseModel):
     queue_id: int
-    status: Literal["pending", "in_progress", "done", "failed"]
-    error_reason: str | None
-    channel: ChannelSummary | None
+    status: QueueStatusValue
+    error_code: str | None = None
+    error_reason: str | None = None
+    channel: ChannelSummary | None = None
 
 
 class SourceList(BaseModel):
