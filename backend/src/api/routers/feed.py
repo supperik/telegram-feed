@@ -25,10 +25,14 @@ async def get_feed(
     redis: Redis = Depends(get_redis),
 ) -> FeedPage:
     cursor_obj = FeedCursor.decode(cursor) if cursor else FeedCursor.initial()
-    cache_key = f"feed:{user.id}:{cursor or 'INITIAL'}:{limit}"
-    cached = await redis.get(cache_key)
-    if cached:
-        return FeedPage.model_validate_json(cached)
+    # INITIAL page must reflect freshly-ingested posts on Refresh, so it is
+    # never cached. Paginated pages (cursor != None) are safe to cache: under
+    # keyset pagination the slice below a given cursor is immutable.
+    cache_key = f"feed:{user.id}:{cursor}:{limit}" if cursor else None
+    if cache_key is not None:
+        cached = await redis.get(cache_key)
+        if cached:
+            return FeedPage.model_validate_json(cached)
 
     rows = await fetch_feed_page(
         db,
@@ -72,5 +76,6 @@ async def get_feed(
     else:
         next_cursor = None
     page = FeedPage(posts=posts, next_cursor=next_cursor)
-    await redis.set(cache_key, page.model_dump_json(), ex=CACHE_TTL_SECONDS)
+    if cache_key is not None:
+        await redis.set(cache_key, page.model_dump_json(), ex=CACHE_TTL_SECONDS)
     return page
