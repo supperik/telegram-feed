@@ -78,5 +78,8 @@ test-results/
 *.db
 .beads-credential-key
 
+# Xray sidecar — VLESS uuid/host are secrets, never commit the live config
+infra/xray/config.json
+
 # Worktrees fallback location (used when EnterWorktree is unavailable in the session)
 .worktrees/

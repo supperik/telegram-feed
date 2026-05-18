@@ -31,6 +31,9 @@ services:
     environment:
       ENV: prod
 
+  xray:
+    restart: always
+
   nginx:
     restart: always
     ports:

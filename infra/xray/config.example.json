@@ -1,0 +1,48 @@
+{
+  "_comment": "Шаблон клиентского xray-конфига. Копируется в infra/xray/config.json (gitignored) и заполняется реальными данными VLESS-сервера.",
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "listen": "0.0.0.0",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "vless-out",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "REPLACE_WITH_VLESS_SERVER_HOST",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_UUID",
+                "encryption": "none",
+                "flow": ""
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "_comment": "Подставь сюда настройки своего transport (tcp+tls / reality / xhttp / ws+tls). Пример ниже — TCP+TLS.",
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "REPLACE_WITH_TLS_SNI",
+          "allowInsecure": false
+        }
+      }
+    }
+  ]
+}

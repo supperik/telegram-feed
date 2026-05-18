@@ -58,6 +58,13 @@ services:
       timeout: 3s
       retries: 10
 
+  xray:
+    image: ghcr.io/xtls/xray-core:25.12.8
+    restart: unless-stopped
+    volumes:
+      - ./infra/xray/config.json:/etc/xray/config.json:ro
+    command: ["run", "-config", "/etc/xray/config.json"]
+
   ingester:
     build:
       context: .
@@ -68,6 +75,7 @@ services:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
       minio:    { condition: service_healthy }
+      xray:     { condition: service_started }
     command: ["python", "-m", "ingester.main"]
     volumes:
       - tg_session:/app/sessions
