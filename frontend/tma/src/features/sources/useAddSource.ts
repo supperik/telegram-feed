@@ -5,10 +5,10 @@ import { SOURCES_QUERY_KEY } from '@/features/sources/useSources';
 import type { AddSourceIn, AddSourceOut, QueueStatusOut } from '@/shared/api/types';
 
 /**
- * Maps backend error_code values (see backend/src/services/sources/errors.py or
- * the API contract for the canonical list) to Russian user-facing copy.
- * `unknown` is the catch-all when the backend returns a code we don't yet
- * localize, or an unexpected non-string code.
+ * Maps backend error_code values to Russian user-facing copy. Canonical
+ * codes are emitted in backend/src/ingester/join_worker.py and
+ * backend/src/ingester/approval_poller.py. `unknown` is the catch-all when
+ * the backend returns a code we don't yet localize.
  */
 export const ERROR_MESSAGES: Record<string, string> = {
   invite_invalid: 'Неверная ссылка',
