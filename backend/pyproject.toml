@@ -17,6 +17,7 @@ pydantic = "^2.9"
 pydantic-settings = "^2.6"
 structlog = "^24.4"
 telethon = "^1.36"
+python-socks = { extras = ["asyncio"], version = "^2.5" }
 redis = { extras = ["hiredis"], version = "^5.1" }
 minio = "^7.2"
 argon2-cffi = "^23.1"

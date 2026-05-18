@@ -104,3 +104,29 @@ def test_make_client_without_proxy_does_not_set_connection_or_proxy(monkeypatch,
         _, kwargs = TC.call_args
         assert "proxy" not in kwargs
         assert "connection" not in kwargs
+
+
+def test_make_client_with_socks5_passes_proxy_dict(monkeypatch, tmp_path):
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("TG_PROXY_TYPE", "socks5")
+    monkeypatch.setenv("TG_PROXY_HOST", "xray")
+    monkeypatch.setenv("TG_PROXY_PORT", "1080")
+    monkeypatch.delenv("TG_PROXY_SECRET", raising=False)
+
+    from shared.config import get_settings
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    with patch("shared.tg.client_factory.TelegramClient") as TC:
+        from shared.tg.client_factory import make_client
+        make_client(settings, sessions_dir=str(tmp_path))
+        TC.assert_called_once()
+        _, kwargs = TC.call_args
+        assert kwargs.get("proxy") == {
+            "proxy_type": "socks5",
+            "addr": "xray",
+            "port": 1080,
+            "rdns": True,
+        }
+        # SOCKS5 must NOT set the MTProxy connection override.
+        assert "connection" not in kwargs

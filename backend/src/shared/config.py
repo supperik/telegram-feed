@@ -33,8 +33,10 @@ class Settings(BaseSettings):
     tg_session_name: str = "userbot_main"
     tg_bot_token: str = ""
 
-    # Telegram proxy (MTProxy only). Leave tg_proxy_type empty for direct connection.
-    tg_proxy_type: Literal["", "mtproxy"] = ""
+    # Telegram proxy. Supported types: "mtproxy" (host/port/secret tuple)
+    # and "socks5" (host/port, no auth — talks to the xray sidecar that
+    # terminates a VLESS tunnel). Leave empty for direct connection.
+    tg_proxy_type: Literal["", "mtproxy", "socks5"] = ""
     tg_proxy_host: str = ""
     tg_proxy_port: int = 0
     tg_proxy_secret: str = ""

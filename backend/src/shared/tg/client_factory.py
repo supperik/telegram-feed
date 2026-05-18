@@ -15,10 +15,14 @@ def make_client(settings: Settings, *, sessions_dir: str = "/app/sessions") -> T
     `<sessions_dir>/<settings.tg_session_name>`; Telethon appends `.session`
     automatically.
 
-    When `settings.tg_proxy_type == "mtproxy"`, the client is configured with
-    `ConnectionTcpMTProxyRandomizedIntermediate` and a `(host, port, secret)`
-    proxy tuple. Useful when outbound MTProto to Telegram DCs is blocked
-    on the network (some VDS providers).
+    Proxy modes:
+    - ``tg_proxy_type == "mtproxy"``: configures
+      ``ConnectionTcpMTProxyRandomizedIntermediate`` and a ``(host, port, secret)``
+      proxy tuple.
+    - ``tg_proxy_type == "socks5"``: passes Telethon's canonical SOCKS5 dict
+      (``{proxy_type, addr, port, rdns}``) — meant to talk to the xray sidecar
+      that terminates a VLESS tunnel. No ``connection=`` override.
+    - else: direct MTProto connection.
     """
     os.makedirs(sessions_dir, exist_ok=True)
     session_path = os.path.join(sessions_dir, settings.tg_session_name)
@@ -31,4 +35,11 @@ def make_client(settings: Settings, *, sessions_dir: str = "/app/sessions") -> T
             settings.tg_proxy_port,
             settings.tg_proxy_secret or _MTPROXY_EMPTY_SECRET,
         )
+    elif settings.tg_proxy_type == "socks5":
+        kwargs["proxy"] = {
+            "proxy_type": "socks5",
+            "addr": settings.tg_proxy_host,
+            "port": settings.tg_proxy_port,
+            "rdns": True,
+        }
     return TelegramClient(session_path, settings.tg_api_id, settings.tg_api_hash, **kwargs)
