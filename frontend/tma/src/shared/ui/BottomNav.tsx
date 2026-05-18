@@ -1,24 +1,34 @@
 import { Link, useRouterState } from '@tanstack/react-router';
+import type { ComponentType } from 'react';
+import { BookmarkIcon, GridIcon, HomeIcon } from '@/shared/ui/icons';
 
-const tabs = [
-  { to: '/', label: 'Feed' },
-  { to: '/sources', label: 'Sources' },
-] as const;
+interface Tab {
+  to: '/' | '/saved' | '/sources';
+  label: string;
+  Icon: ComponentType<{ size?: number; className?: string }>;
+}
+
+const tabs: Tab[] = [
+  { to: '/', label: 'Лента', Icon: HomeIcon },
+  { to: '/saved', label: 'Сохранёнки', Icon: BookmarkIcon },
+  { to: '/sources', label: 'Источники', Icon: GridIcon },
+];
 
 export function BottomNav() {
-  const location = useRouterState({ select: (s) => s.location.pathname });
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-2 border-t border-hint/20 bg-bg">
-      {tabs.map((t) => {
-        const active = location === t.to;
+    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-hint/15 bg-bg/95 backdrop-blur">
+      {tabs.map(({ to, label, Icon }) => {
+        const active = pathname === to;
         return (
           <Link
-            key={t.to}
-            to={t.to}
+            key={to}
+            to={to}
             aria-current={active ? 'page' : undefined}
-            className={`py-3 text-center text-sm ${active ? 'text-link font-semibold' : 'text-hint'}`}
+            className={`flex flex-col items-center gap-1 py-2 text-[11px] ${active ? 'text-link' : 'text-hint'}`}
           >
-            {t.label}
+            <Icon size={22} />
+            {label}
           </Link>
         );
       })}
