@@ -56,12 +56,13 @@ export function useSavePost() {
         ...page,
         posts: page.posts.map((p) => (p.id === postId ? { ...p, is_saved: save } : p)),
       }));
-      // Unsaving from the saved tab removes the row entirely; saving from
-      // somewhere else doesn't insert it (the saved list is keyset-ordered
-      // by saved_at — server is the source of truth for insertion order).
+      // Don't yank the row out of the saved list on unsave — a mistaken
+      // tap shouldn't visually delete the card. The bookmark icon flips to
+      // empty so the user sees what happened; the row disappears only on
+      // the next refetch.
       const savedSnap = snapshotAndPatch(qc, SAVED_POSTS_QUERY_KEY, (page) => ({
         ...page,
-        posts: save ? page.posts : page.posts.filter((p) => p.id !== postId),
+        posts: page.posts.map((p) => (p.id === postId ? { ...p, is_saved: save } : p)),
       }));
       return { feedSnap, hiddenSnap, savedSnap };
     },
@@ -105,17 +106,9 @@ export function useUnhidePost() {
   return useMutation({
     mutationFn: (postId: number) =>
       apiFetch<void>(`/posts/${postId}/hide`, { method: 'DELETE' }),
-    onMutate: async (postId) => {
-      await qc.cancelQueries({ queryKey: HIDDEN_POSTS_QUERY_KEY });
-      const hiddenSnap = snapshotAndPatch(qc, HIDDEN_POSTS_QUERY_KEY, (page) => ({
-        ...page,
-        posts: page.posts.filter((p) => p.id !== postId),
-      }));
-      return { hiddenSnap };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.hiddenSnap) rollback(qc, ctx.hiddenSnap);
-    },
+    // No optimistic patch of the hidden list — a mistaken tap shouldn't
+    // visually delete the card. The row leaves the list only on the next
+    // refetch of the tab.
     onSettled: () => {
       // Returning the post to the feed depends on its posted_at relative to
       // whatever cursor pages we already have — let the server resolve it.
