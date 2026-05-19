@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 import uuid
 from datetime import datetime, timezone
 
@@ -53,8 +54,12 @@ def _seed_channels(pg_container, *, count: int = 3, with_banned: bool = True):
         out = []
         async with sf() as s:
             for i in range(count):
+                # tg_chat_id is BigInt UNIQUE. The session-scoped pg_container
+                # does NOT reset between tests, so collisions accumulate across
+                # the suite. Use secrets.randbits(40) (~1T slots) to make
+                # cross-test collision astronomically unlikely. See 4vi.
                 ch = Channel(
-                    tg_chat_id=-100_000_000 - hash(suffix + str(i)) % 10_000,
+                    tg_chat_id=-100_000_000 - secrets.randbits(40),
                     username=f"chan_{suffix}_{i}",
                     title=f"Channel {suffix} #{i}",
                     posts_count=10 * (i + 1),

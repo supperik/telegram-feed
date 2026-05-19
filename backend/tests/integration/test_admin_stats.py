@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -49,12 +50,16 @@ def _seed_stats_corpus(pg_container):
         suffix = uuid.uuid4().hex[:6]
         last_post_at = None
         async with sf() as s:
+            # tg_user_id / tg_chat_id are BigInt UNIQUE columns; the session-scoped
+            # pg_container persists across the whole suite, so collisions
+            # accumulated under the tight `% 1_000` / `% 10_000` formula. Use
+            # secrets.randbits(40) for astronomically rare collision. See 4vi.
             for i in range(3):
-                s.add(User(tg_user_id=10_000 + hash(suffix + str(i)) % 1_000, tg_username=f"u{suffix}{i}"))
+                s.add(User(tg_user_id=10_000 + secrets.randbits(40), tg_username=f"u{suffix}{i}"))
             channels = []
             for i in range(4):
                 ch = Channel(
-                    tg_chat_id=-200_000_000 - hash(suffix + "c" + str(i)) % 10_000,
+                    tg_chat_id=-200_000_000 - secrets.randbits(40),
                     username=f"sc_{suffix}_{i}",
                     title=f"SC {i}",
                     banned=(i == 0),
