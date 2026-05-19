@@ -54,10 +54,10 @@ async def _reset_catalog_router_inputs(db_session):
 async def test_get_catalog_default_view_available(async_client, db_session, seed_user):
     uid = await seed_user(tg_user_id=301)
     ch1 = await _seed_active_channel(
-        db_session, tg_chat_id=10001, username="cat_router_aaa", title="AAA", posts_count=10,
+        db_session, tg_chat_id=210001, username="cat_router_aaa", title="AAA", posts_count=10,
     )
     ch2 = await _seed_active_channel(
-        db_session, tg_chat_id=10002, username="cat_router_bbb", title="BBB", posts_count=5,
+        db_session, tg_chat_id=210002, username="cat_router_bbb", title="BBB", posts_count=5,
     )
     r = await async_client.get("/channels/catalog", headers=_auth(uid))
     assert r.status_code == 200, r.text
@@ -75,7 +75,7 @@ async def test_get_catalog_pagination(async_client, db_session, seed_user):
     uid = await seed_user(tg_user_id=302)
     for i in range(3):
         await _seed_active_channel(
-            db_session, tg_chat_id=11000 + i,
+            db_session, tg_chat_id=211000 + i,
             username=f"cat_router_p{i}", title=f"P{i}", posts_count=10 - i,
         )
     r1 = await async_client.get("/channels/catalog?limit=2", headers=_auth(uid))
@@ -98,11 +98,11 @@ async def test_get_catalog_pagination(async_client, db_session, seed_user):
 async def test_get_catalog_q_filter(async_client, db_session, seed_user):
     uid = await seed_user(tg_user_id=303)
     ch = await _seed_active_channel(
-        db_session, tg_chat_id=12001, username="cat_router_meduzaproject", title="Meduza",
+        db_session, tg_chat_id=212001, username="cat_router_meduzaproject", title="Meduza",
         posts_count=1,
     )
     await _seed_active_channel(
-        db_session, tg_chat_id=12002, username="cat_router_other", title="Other", posts_count=1,
+        db_session, tg_chat_id=212002, username="cat_router_other", title="Other", posts_count=1,
     )
     r = await async_client.get("/channels/catalog?q=medU", headers=_auth(uid))
     items = r.json()["items"]
@@ -114,7 +114,7 @@ async def test_get_catalog_q_filter(async_client, db_session, seed_user):
 async def test_get_catalog_view_hidden(async_client, db_session, seed_user):
     uid = await seed_user(tg_user_id=304)
     ch = await _seed_active_channel(
-        db_session, tg_chat_id=13001, username="cat_router_h", title="H", posts_count=1,
+        db_session, tg_chat_id=213001, username="cat_router_h", title="H", posts_count=1,
     )
     db_session.add(UserCatalogHiddenChannel(user_id=uid, channel_id=ch.id))
     await db_session.commit()
@@ -136,7 +136,7 @@ async def test_get_catalog_view_hidden(async_client, db_session, seed_user):
 async def test_get_catalog_is_subscribed_flag(async_client, db_session, seed_user):
     uid = await seed_user(tg_user_id=305)
     ch = await _seed_active_channel(
-        db_session, tg_chat_id=14001, username="cat_router_s", title="S", posts_count=1,
+        db_session, tg_chat_id=214001, username="cat_router_s", title="S", posts_count=1,
     )
     db_session.add(UserSource(user_id=uid, channel_id=ch.id))
     await db_session.commit()
@@ -178,7 +178,7 @@ async def test_hide_unhide_endpoints_round_trip(
 ):
     uid = await seed_user(tg_user_id=310)
     ch = await _seed_active_channel(
-        db_session, tg_chat_id=15001, username="cat_router_hh", title="HH", posts_count=1,
+        db_session, tg_chat_id=215001, username="cat_router_hh", title="HH", posts_count=1,
     )
     r1 = await async_client.post(
         f"/channels/catalog/{ch.id}/hide", headers=_auth(uid)
@@ -215,7 +215,7 @@ async def test_hide_endpoint_404_for_missing_channel(async_client, seed_user):
 async def test_hide_moves_channel_between_views(async_client, db_session, seed_user):
     uid = await seed_user(tg_user_id=312)
     ch = await _seed_active_channel(
-        db_session, tg_chat_id=16001, username="cat_router_mv", title="MV", posts_count=1,
+        db_session, tg_chat_id=216001, username="cat_router_mv", title="MV", posts_count=1,
     )
     r_av = await async_client.get("/channels/catalog", headers=_auth(uid))
     assert [i["channel"]["id"] for i in r_av.json()["items"]] == [ch.id]
