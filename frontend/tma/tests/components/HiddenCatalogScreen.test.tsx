@@ -19,11 +19,11 @@ const API_BASE = 'http://test.local';
 function renderWithRouter() {
   const rootRoute = createRootRoute({ component: () => <HiddenCatalogScreen /> });
   const sourcesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sources', component: () => null });
-  const hiddenRoute = createRoute({ getParentRoute: () => sourcesRoute, path: '/hidden', component: () => null });
-  const routeTree = rootRoute.addChildren([sourcesRoute.addChildren([hiddenRoute])]);
+  const catalogHiddenRoute = createRoute({ getParentRoute: () => sourcesRoute, path: '/catalog-hidden', component: () => null });
+  const routeTree = rootRoute.addChildren([sourcesRoute.addChildren([catalogHiddenRoute])]);
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: ['/sources/hidden'] }),
+    history: createMemoryHistory({ initialEntries: ['/sources/catalog-hidden'] }),
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(

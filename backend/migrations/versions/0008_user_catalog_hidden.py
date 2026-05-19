@@ -1,7 +1,7 @@
 """user_catalog_hidden_channels: per-user hidden-from-catalog list
 
-Revision ID: 0005_user_catalog_hidden
-Revises: 0004_private_invite_queue
+Revision ID: 0008_user_catalog_hidden
+Revises: 0007_media_uniq_tg_file_id
 Create Date: 2026-05-19
 
 """
@@ -12,8 +12,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0005_user_catalog_hidden"
-down_revision: Union[str, Sequence[str], None] = "0004_private_invite_queue"
+revision: str = "0008_user_catalog_hidden"
+down_revision: Union[str, Sequence[str], None] = "0007_media_uniq_tg_file_id"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -66,13 +66,14 @@ async def main() -> None:
         )
         # Catch up BEFORE subscribing live so we don't miss anything.
         await catchup_channels(client, session_factory, minio_client,
-                                bucket=settings.minio_bucket)
+                                bucket=settings.minio_bucket, settings=settings)
         # Self-healing: re-fetch the last N messages for channels that
         # still have Media rows with storage_key=NULL (orphans from when
         # catchup didn't download media; see telegram-feed-pj0).
         # Idempotent: targets query is empty once everything is filled in.
         await backfill_recent_media(client, session_factory, minio_client,
-                                     bucket=settings.minio_bucket, limit=50)
+                                     bucket=settings.minio_bucket, settings=settings,
+                                     limit=50)
         # Refill text_html for posts ingested before this column was wired
         # to entities_to_html. Idempotent: no-op once everything is set.
         await backfill_text_html(client, session_factory)
@@ -94,16 +95,19 @@ async def main() -> None:
             client, session_factory,
             minio_client=minio_client,
             bucket=settings.minio_bucket,
+            settings=settings,
         )
         await asyncio.gather(
             run_join_worker(
                 client, session_factory,
                 minio_client=minio_client, bucket=settings.minio_bucket,
+                settings=settings,
                 chat_map=chat_map,
             ),
             run_approval_poller(
                 client, session_factory,
                 minio_client=minio_client, bucket=settings.minio_bucket,
+                settings=settings,
                 poll_interval_s=settings.approval_poll_interval_s,
                 timeout_days=settings.approval_timeout_days,
             ),

@@ -18,18 +18,18 @@ import { server } from '../msw/server';
 
 const API_BASE = 'http://test.local';
 
-// Regression test for the routing bug where `/sources/hidden` was registered
+// Regression test for the routing bug where `/sources/catalog-hidden` was registered
 // as a nested child of `/sources` in `routeTree.gen.ts`. Because the parent
 // `SourcesScreen` does not render `<Outlet />`, that nesting caused
-// `/sources/hidden` to render `SourcesScreen` again — never the
+// `/sources/catalog-hidden` to render `SourcesScreen` again — never the
 // `HiddenCatalogScreen`. The fix is the `src/routes/sources/` directory
 // layout, which makes both routes direct siblings of root.
 //
 // We verify in two layers:
 //   1. structural assertion against the real `routeTree.gen.ts` — the
-//      `/sources/hidden` route must NOT have `/sources` as its parent.
+//      `/sources/catalog-hidden` route must NOT have `/sources` as its parent.
 //   2. render assertion using a stub tree that mirrors the post-fix layout
-//      (both routes as direct siblings under root) — `/sources/hidden`
+//      (both routes as direct siblings under root) — `/sources/catalog-hidden`
 //      renders `HiddenCatalogScreen`, and `/sources` renders `SourcesScreen`.
 function renderAtPath(path: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
@@ -40,7 +40,7 @@ function renderAtPath(path: string) {
   });
   const hiddenRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: '/sources/hidden',
+    path: '/sources/catalog-hidden',
     component: HiddenCatalogScreen,
   });
   const routeTree = rootRoute.addChildren([sourcesRoute, hiddenRoute]);
@@ -62,14 +62,14 @@ function authenticate() {
   setTokens({ access_token: 'a', refresh_token: 'r', token_type: 'bearer', expires_in: 60 });
 }
 
-describe('routeTree /sources/hidden structure', () => {
-  it('registers /sources/hidden as a sibling of /sources, not a nested child', () => {
+describe('routeTree /sources/catalog-hidden structure', () => {
+  it('registers /sources/catalog-hidden as a sibling of /sources, not a nested child', () => {
     // Both routes must be direct children of the root, not nested. The
     // previous (buggy) gen file registered SourcesHiddenRoute with
     // `getParentRoute: () => SourcesRoute`, so it would appear as a
     // grandchild of root via `SourcesRoute.children`. After the fix, both
     // show up directly in `root.children` and the parent chain of
-    // `/sources/hidden` does NOT go through `/sources`.
+    // `/sources/catalog-hidden` does NOT go through `/sources`.
     type RouteOptions = { id?: string; getParentRoute?: () => RouteLike };
     type RouteLike = {
       options?: RouteOptions;
@@ -91,9 +91,9 @@ describe('routeTree /sources/hidden structure', () => {
     const all = collect(root);
     const idOf = (n: RouteLike) => n.options?.id;
     const parentOf = (n: RouteLike) => n.options?.getParentRoute?.();
-    const hidden = all.find((n) => idOf(n) === '/sources/hidden');
+    const hidden = all.find((n) => idOf(n) === '/sources/catalog-hidden');
     const sources = all.find((n) => idOf(n) === '/sources/');
-    expect(hidden, 'expected /sources/hidden route to exist in the tree').toBeDefined();
+    expect(hidden, 'expected /sources/catalog-hidden route to exist in the tree').toBeDefined();
     expect(sources, 'expected /sources/ route to exist in the tree').toBeDefined();
     // The hidden route's parent must be the root (no `options.id`), NOT the
     // `/sources` route — otherwise the bug is back.
@@ -102,16 +102,18 @@ describe('routeTree /sources/hidden structure', () => {
   });
 });
 
-describe('routeTree /sources/hidden integration', () => {
-  it('renders HiddenCatalogScreen at /sources/hidden, not SourcesScreen', async () => {
+describe('routeTree /sources/catalog-hidden integration', () => {
+  it('renders HiddenCatalogScreen at /sources/catalog-hidden, not SourcesScreen', async () => {
     authenticate();
     server.use(
+      http.get(`${API_BASE}/sources`, () => HttpResponse.json({ items: [] })),
+      http.get(`${API_BASE}/sources/hidden`, () => HttpResponse.json({ items: [] })),
       http.get(`${API_BASE}/channels/catalog`, () =>
         HttpResponse.json({ items: [], next_cursor: null }),
       ),
     );
 
-    renderAtPath('/sources/hidden');
+    renderAtPath('/sources/catalog-hidden');
 
     await waitFor(() =>
       expect(screen.getByText(/скрытые из каталога/i)).toBeInTheDocument(),
@@ -125,6 +127,7 @@ describe('routeTree /sources/hidden integration', () => {
     authenticate();
     server.use(
       http.get(`${API_BASE}/sources`, () => HttpResponse.json({ items: [] })),
+      http.get(`${API_BASE}/sources/hidden`, () => HttpResponse.json({ items: [] })),
       http.get(`${API_BASE}/channels/catalog`, () =>
         HttpResponse.json({ items: [], next_cursor: null }),
       ),

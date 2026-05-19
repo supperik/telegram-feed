@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiFetch, apiPost } from '@/shared/api/client';
+import { HIDDEN_SOURCES_QUERY_KEY } from '@/features/sources/useHiddenSources';
 import { SOURCES_QUERY_KEY } from '@/features/sources/useSources';
 import type { AddSourceIn, AddSourceOut, QueueStatusOut } from '@/shared/api/types';
 
@@ -61,6 +62,7 @@ export function useAddSource(): AddSourceResult {
       if (data.status === 'subscribed') {
         setState({ kind: 'subscribed' });
         qc.invalidateQueries({ queryKey: SOURCES_QUERY_KEY });
+        qc.invalidateQueries({ queryKey: HIDDEN_SOURCES_QUERY_KEY });
       } else {
         setQueueId(data.queue_id);
         setState({ kind: 'queued', queueId: data.queue_id, status: 'pending' });

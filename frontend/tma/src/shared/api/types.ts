@@ -21,6 +21,7 @@ export interface ChannelSummary {
 // doesn't need this and keeps the slimmer ChannelSummary shape).
 export interface FeedChannel extends ChannelSummary {
   tg_chat_id: number;
+  invite_url: string | null;
 }
 
 export interface FeedMedia {
@@ -29,6 +30,7 @@ export interface FeedMedia {
   width: number | null;
   height: number | null;
   duration: number | null;
+  has_video_file: boolean;
 }
 
 export interface FeedPost {
@@ -57,6 +59,15 @@ export interface SourceListItem {
 
 export interface SourceList {
   items: SourceListItem[];
+}
+
+export interface HiddenSourceItem {
+  channel: ChannelSummary;
+  hidden_at: string;
+}
+
+export interface HiddenSourceList {
+  items: HiddenSourceItem[];
 }
 
 export type QueueStatus = 'pending' | 'in_progress' | 'pending_approval' | 'done' | 'failed';

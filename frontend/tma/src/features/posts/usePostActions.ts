@@ -1,8 +1,14 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { apiFetch } from '@/shared/api/client';
 import { FEED_QUERY_KEY } from '@/features/feed/useFeed';
+import { HIDDEN_SOURCES_QUERY_KEY } from '@/features/sources/useHiddenSources';
 import { SOURCES_QUERY_KEY } from '@/features/sources/useSources';
-import type { FeedPage } from '@/shared/api/types';
+import type {
+  FeedPage,
+  HiddenSourceList,
+  SourceList,
+  SourceListItem,
+} from '@/shared/api/types';
 
 type FeedCache = InfiniteData<FeedPage, unknown>;
 
@@ -71,19 +77,38 @@ export function useHidePost() {
 export function useHideSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (channelId: number) =>
-      apiFetch<void>(`/sources/${channelId}/hide`, { method: 'POST' }),
-    onMutate: async (channelId) => {
+    mutationFn: (item: SourceListItem) =>
+      apiFetch<void>(`/sources/${item.channel.id}/hide`, { method: 'POST' }),
+    onMutate: async (item) => {
+      const channelId = item.channel.id;
       await qc.cancelQueries({ queryKey: FEED_QUERY_KEY });
       await qc.cancelQueries({ queryKey: SOURCES_QUERY_KEY });
+      await qc.cancelQueries({ queryKey: HIDDEN_SOURCES_QUERY_KEY });
       const feedSnap = snapshotAndPatchFeed(qc, (page) => ({
         ...page,
         posts: page.posts.filter((p) => p.channel.id !== channelId),
       }));
-      return { feedSnap };
+      const prevSources = qc.getQueryData<SourceList>(SOURCES_QUERY_KEY);
+      qc.setQueryData<SourceList>(SOURCES_QUERY_KEY, (old) =>
+        old ? { items: old.items.filter((s) => s.channel.id !== channelId) } : old,
+      );
+      const prevHidden = qc.getQueryData<HiddenSourceList>(HIDDEN_SOURCES_QUERY_KEY);
+      qc.setQueryData<HiddenSourceList>(HIDDEN_SOURCES_QUERY_KEY, (old) => {
+        const next = { channel: item.channel, hidden_at: new Date().toISOString() };
+        if (!old) return { items: [next] };
+        if (old.items.some((h) => h.channel.id === channelId)) return old;
+        return { items: [next, ...old.items] };
+      });
+      return { feedSnap, prevSources, prevHidden };
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.feedSnap) rollbackFeed(qc, ctx.feedSnap);
+      if (ctx?.prevSources) qc.setQueryData(SOURCES_QUERY_KEY, ctx.prevSources);
+      if (ctx?.prevHidden) qc.setQueryData(HIDDEN_SOURCES_QUERY_KEY, ctx.prevHidden);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: SOURCES_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: HIDDEN_SOURCES_QUERY_KEY });
     },
   });
 }

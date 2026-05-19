@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PostCard } from '@/features/feed/PostCard';
 import type { FeedPost } from '@/shared/api/types';
+import * as telegram from '@/shared/lib/telegram';
 
 function wrap() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -27,6 +28,7 @@ const post: FeedPost = {
     title: 'Meduza',
     photo_url: null,
     is_private: false,
+    invite_url: null,
   },
   media: [],
   is_saved: false,
@@ -109,5 +111,56 @@ describe('PostCard', () => {
     const saved = { ...post, is_saved: true };
     render(<PostCard post={saved} />, { wrapper: wrap() });
     expect(screen.getByRole('button', { name: /unsave/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('PostCard — private-channel smart Telegram button', () => {
+  const inviteUrl = 'https://t.me/+abc123';
+
+  function privatePostWithInvite(): FeedPost {
+    return {
+      ...post,
+      channel: {
+        ...post.channel,
+        username: null,
+        is_private: true,
+        invite_url: inviteUrl,
+      },
+    };
+  }
+
+  it('points the single Open-in-Telegram link at invite_url when present', () => {
+    render(<PostCard post={privatePostWithInvite()} />, { wrapper: wrap() });
+    const link = screen.getByRole('link', { name: /open in telegram/i });
+    expect(link).toHaveAttribute('href', inviteUrl);
+  });
+
+  it('does not render a separate Присоединиться button anymore', () => {
+    render(<PostCard post={privatePostWithInvite()} />, { wrapper: wrap() });
+    expect(screen.queryByRole('link', { name: /Присоединиться/i })).toBeNull();
+  });
+
+  it('clicking the link calls openTelegramLink with the invite URL', () => {
+    const spy = vi.spyOn(telegram, 'openTelegramLink').mockImplementation(() => {});
+    render(<PostCard post={privatePostWithInvite()} />, { wrapper: wrap() });
+    const link = screen.getByRole('link', { name: /open in telegram/i });
+    const notCanceled = fireEvent.click(link);
+    expect(spy).toHaveBeenCalledWith(inviteUrl);
+    expect(notCanceled).toBe(false);
+  });
+
+  it('private channel without invite_url still falls back to t.me/c/<chat>/<msg>', () => {
+    const privateNoHashPost: FeedPost = {
+      ...post,
+      channel: {
+        ...post.channel,
+        username: null,
+        is_private: true,
+        invite_url: null,
+      },
+    };
+    render(<PostCard post={privateNoHashPost} />, { wrapper: wrap() });
+    const link = screen.getByRole('link', { name: /open in telegram/i });
+    expect(link).toHaveAttribute('href', 'https://t.me/c/1319248631/42');
   });
 });

@@ -145,19 +145,32 @@ async def merge_existing_albums(
                 )
                 next_pos = int(max_pos_res.scalar_one()) + 1
 
+                # Track tg_file_ids already living on the head — moving a tail
+                # media row whose tg_file_id is already there would violate the
+                # UNIQUE(post_id, tg_file_id) index added in 0007.
+                head_files_res = await session.execute(
+                    select(Media.tg_file_id).where(Media.post_id == head_post_id)
+                )
+                present_files: set[str | None] = set(head_files_res.scalars().all())
+
                 for tail_post_id in tail_ids:
                     tail_media_res = await session.execute(
-                        select(Media.id)
+                        select(Media.id, Media.tg_file_id)
                         .where(Media.post_id == tail_post_id)
                         .order_by(Media.id.asc())
                     )
-                    media_ids = [r[0] for r in tail_media_res.all()]
-                    for media_id in media_ids:
+                    for media_id, tg_file_id in tail_media_res.all():
+                        if tg_file_id in present_files:
+                            await session.execute(
+                                delete(Media).where(Media.id == media_id)
+                            )
+                            continue
                         await session.execute(
                             update(Media)
                             .where(Media.id == media_id)
                             .values(post_id=head_post_id, position=next_pos)
                         )
+                        present_files.add(tg_file_id)
                         next_pos += 1
 
                 await session.execute(

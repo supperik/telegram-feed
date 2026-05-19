@@ -32,7 +32,14 @@ function wrap() {
       path: '/hidden',
       component: () => null,
     });
-    const routeTree = rootRoute.addChildren([sourcesRoute.addChildren([hiddenRoute])]);
+    const catalogHiddenRoute = createRoute({
+      getParentRoute: () => sourcesRoute,
+      path: '/catalog-hidden',
+      component: () => null,
+    });
+    const routeTree = rootRoute.addChildren([
+      sourcesRoute.addChildren([hiddenRoute, catalogHiddenRoute]),
+    ]);
     const router = createRouter({
       routeTree,
       history: createMemoryHistory({ initialEntries: ['/sources'] }),
@@ -49,17 +56,21 @@ function authenticate() {
   setTokens({ access_token: 'a', refresh_token: 'r', token_type: 'bearer', expires_in: 60 });
 }
 
+function emptyHandlers() {
+  server.use(
+    http.get(`${API_BASE}/sources`, () => HttpResponse.json({ items: [] })),
+    http.get(`${API_BASE}/sources/hidden`, () => HttpResponse.json({ items: [] })),
+    http.get(`${API_BASE}/channels/catalog`, () =>
+      HttpResponse.json({ items: [], next_cursor: null }),
+    ),
+  );
+}
+
 describe('SourcesScreen', () => {
   it('does not show legacy "only public channels" notice', async () => {
     authenticate();
-    server.use(
-      http.get(`${API_BASE}/sources`, () => HttpResponse.json({ items: [] })),
-      http.get(`${API_BASE}/channels/catalog`, () =>
-        HttpResponse.json({ items: [], next_cursor: null }),
-      ),
-    );
+    emptyHandlers();
     render(<SourcesScreen />, { wrapper: wrap() });
-    // Wait for the screen to render past the pending state (empty list shows EmptyState title).
     await waitFor(() =>
       expect(screen.getByText(/подключите первый канал/i)).toBeInTheDocument(),
     );
@@ -70,6 +81,7 @@ describe('SourcesScreen', () => {
     authenticate();
     server.use(
       http.get(`${API_BASE}/sources`, () => HttpResponse.json({ items: [] })),
+      http.get(`${API_BASE}/sources/hidden`, () => HttpResponse.json({ items: [] })),
       http.get(`${API_BASE}/channels/catalog`, () =>
         HttpResponse.json({
           items: [
@@ -88,5 +100,39 @@ describe('SourcesScreen', () => {
     render(<SourcesScreen />, { wrapper: wrap() });
     await waitFor(() => expect(screen.getByText('Show')).toBeInTheDocument());
     expect(screen.getByText(/доступные каналы/i)).toBeInTheDocument();
+  });
+
+  it('renders the "hidden from feed" section when API returns items', async () => {
+    authenticate();
+    server.use(
+      http.get(`${API_BASE}/sources`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              channel: { id: 1, username: 'a', title: 'A', photo_url: null, is_private: false },
+              added_at: '2026-05-18T00:00:00Z',
+              subscription_status: 'active',
+            },
+          ],
+        }),
+      ),
+      http.get(`${API_BASE}/sources/hidden`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              channel: { id: 2, username: 'h', title: 'H', photo_url: null, is_private: false },
+              hidden_at: '2026-05-19T00:00:00Z',
+            },
+          ],
+        }),
+      ),
+      http.get(`${API_BASE}/channels/catalog`, () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    );
+    render(<SourcesScreen />, { wrapper: wrap() });
+    await waitFor(() =>
+      expect(screen.getByText(/скрыты из ленты \(1\)/i)).toBeInTheDocument(),
+    );
   });
 });

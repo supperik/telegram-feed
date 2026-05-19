@@ -12,8 +12,7 @@ interface Props {
 }
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
-// Native <img> tags can't send custom headers, so we pass the JWT via
-// query param. /api/media/{id} accepts either ?token=... or Authorization.
+
 function mediaUrl(id: number): string {
   const tokens = getTokens();
   return tokens
@@ -39,17 +38,20 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   five:  'grid grid-cols-3 grid-rows-2 [&>*:nth-child(1)]:col-span-2 [&>*:nth-child(2)]:col-span-1 [&>*:nth-child(n+3)]:aspect-square',
 };
 
-interface TileProps {
+interface PhotoTileProps {
   m: FeedMedia;
-  channel: FeedChannel;
-  tgMessageId: number;
   overlay?: string | null;
-  onOpenPhoto?: () => void;
+  onOpen: () => void;
 }
 
-function Tile({ m, channel, tgMessageId, overlay, onOpenPhoto }: TileProps) {
-  if (m.type === 'photo') {
-    const content = (
+function PhotoTile({ m, overlay, onOpen }: PhotoTileProps) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="Open media"
+      className="block h-full w-full p-0 text-left"
+    >
       <div className="relative h-full w-full overflow-hidden bg-black/5">
         <img src={mediaUrl(m.id)} alt="" loading="lazy" className="h-full w-full object-cover" />
         {overlay ? (
@@ -58,47 +60,38 @@ function Tile({ m, channel, tgMessageId, overlay, onOpenPhoto }: TileProps) {
           </div>
         ) : null}
       </div>
-    );
-    return (
-      <button
-        type="button"
-        onClick={onOpenPhoto}
-        aria-label="Open media"
-        className="block h-full w-full p-0 text-left"
-      >
-        {content}
-      </button>
-    );
-  }
-  if (m.type === 'video') {
-    // Backend doesn't serve video bytes (only thumbnails), so playing it
-    // inside the TMA isn't possible yet — tap takes the user straight to
-    // the Telegram client where the video plays natively.
-    const link = tgPostUrl(channel, tgMessageId);
-    const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
-      e.preventDefault();
-      openTelegramLink(link);
-    };
-    return (
-      <a href={link} onClick={onOpen} className="block h-full w-full">
-        <div className="relative h-full w-full overflow-hidden bg-black/5">
-          <img src={mediaUrl(m.id)} alt="" loading="lazy" className="h-full w-full object-cover" />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/15">
-            <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
-              ▶ {m.duration ? `${m.duration}s` : 'Video'}
-            </span>
-          </div>
-          {overlay ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-semibold text-white">
-              {overlay}
-            </div>
-          ) : null}
-        </div>
-      </a>
-    );
-  }
+    </button>
+  );
+}
+
+interface VideoRowProps {
+  m: FeedMedia;
+  channel: FeedChannel;
+  tgMessageId: number;
+}
+
+function VideoRow({ m, channel, tgMessageId }: VideoRowProps) {
+  const link = tgPostUrl(channel, tgMessageId);
+  const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    openTelegramLink(link);
+  };
+  const label = m.duration ? `Видео · ${m.duration}s` : 'Видео';
   return (
-    <div className="bg-secondary p-3 text-sm text-hint">Документ — открыть в Telegram.</div>
+    <a
+      href={link}
+      onClick={onOpen}
+      className="mt-1 flex items-center gap-2 rounded bg-secondary px-3 py-2 text-sm text-link"
+    >
+      <span aria-hidden>▶</span>
+      <span>{label} — открыть в Telegram</span>
+    </a>
+  );
+}
+
+function DocumentRow() {
+  return (
+    <div className="mt-1 bg-secondary p-3 text-sm text-hint">Документ — открыть в Telegram.</div>
   );
 }
 
@@ -106,29 +99,35 @@ export function MediaGallery({ media, channel, tgMessageId }: Props) {
   // openIndex is into the PHOTO-only slide list (lightbox slides skip videos).
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   if (media.length === 0) return null;
-  const visible = media.slice(0, 5);
-  const overflow = media.length - visible.length;
-  const variant = variantFor(visible.length);
+
+  const photos = media.filter((m) => m.type === 'photo');
+  const videos = media.filter((m) => m.type === 'video');
+  const documents = media.filter((m) => m.type === 'document');
+
+  const visiblePhotos = photos.slice(0, 5);
+  const overflow = photos.length - visiblePhotos.length;
+  const variant = variantFor(visiblePhotos.length);
+
   return (
     <>
-      <div data-grid={variant} className={`mt-1 gap-0.5 bg-black/10 ${VARIANT_CLASSES[variant]}`}>
-        {visible.map((m, i) => {
-          const photoIndex =
-            m.type === 'photo'
-              ? media.slice(0, i).filter((x) => x.type === 'photo').length
-              : -1;
-          return (
-            <Tile
+      {visiblePhotos.length > 0 ? (
+        <div data-grid={variant} className={`mt-1 gap-0.5 bg-black/10 ${VARIANT_CLASSES[variant]}`}>
+          {visiblePhotos.map((m, i) => (
+            <PhotoTile
               key={m.id}
               m={m}
-              channel={channel}
-              tgMessageId={tgMessageId}
-              overlay={i === visible.length - 1 && overflow > 0 ? `+${overflow}` : null}
-              onOpenPhoto={photoIndex >= 0 ? () => setOpenIndex(photoIndex) : undefined}
+              overlay={i === visiblePhotos.length - 1 && overflow > 0 ? `+${overflow}` : null}
+              onOpen={() => setOpenIndex(i)}
             />
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : null}
+      {videos.map((m) => (
+        <VideoRow key={m.id} m={m} channel={channel} tgMessageId={tgMessageId} />
+      ))}
+      {documents.map((m) => (
+        <DocumentRow key={m.id} />
+      ))}
       {openIndex !== null ? (
         <MediaLightbox
           media={media}

@@ -8,6 +8,12 @@ import pytest
 import ingester.approval_poller as ap
 
 
+class _S:
+    """Stand-in for shared.config.Settings — only the fields the cap-helper reads."""
+    video_max_download_bytes = 20 * 1024 * 1024
+    video_max_download_seconds = 60
+
+
 def _row(*, id=1, invite_hash="abc12345", user_id=42, age_days=0):
     r = MagicMock()
     r.id = id
@@ -40,7 +46,7 @@ async def test_pending_chat_invite_still_pending_does_nothing(monkeypatch):
     monkeypatch.setattr(ap, "mark_join_failed", mark_failed)
 
     await ap._approval_poll_once(client, factory, minio_client=MagicMock(),
-                                 bucket="b", timeout_days=7)
+                                 bucket="b", timeout_days=7, settings=_S())
     post_join.assert_not_awaited()
     mark_failed.assert_not_awaited()
 
@@ -61,7 +67,7 @@ async def test_chat_invite_already_triggers_post_join(monkeypatch):
     monkeypatch.setattr(ap, "_backfill_channel", backfill)
 
     await ap._approval_poll_once(client, factory, minio_client=MagicMock(),
-                                 bucket="b", timeout_days=7)
+                                 bucket="b", timeout_days=7, settings=_S())
     post_join.assert_awaited_once()
     backfill.assert_awaited_once()
 
@@ -79,7 +85,7 @@ async def test_timeout_marks_failed(monkeypatch):
     monkeypatch.setattr(ap, "mark_join_failed", mark_failed)
 
     await ap._approval_poll_once(client, factory, minio_client=MagicMock(),
-                                 bucket="b", timeout_days=7)
+                                 bucket="b", timeout_days=7, settings=_S())
     invoke.assert_not_awaited()
     mark_failed.assert_awaited_once()
     assert mark_failed.await_args.kwargs["error_code"] == "approval_timeout"
@@ -97,5 +103,5 @@ async def test_expired_hash_marks_failed(monkeypatch):
     monkeypatch.setattr(ap, "mark_join_failed", mark_failed)
 
     await ap._approval_poll_once(client, factory, minio_client=MagicMock(),
-                                 bucket="b", timeout_days=7)
+                                 bucket="b", timeout_days=7, settings=_S())
     assert mark_failed.await_args.kwargs["error_code"] == "invite_expired"

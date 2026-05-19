@@ -20,7 +20,10 @@ function formatCount(n: number): string {
 }
 
 export function PostCard({ post }: Props) {
-  const link = tgPostUrl(post.channel, post.tg_message_id);
+  // For private channels with an invite link, the Telegram button leads to
+  // the invite (a non-member can join; an already-member is taken to the
+  // channel). For everything else it deep-links to the post itself.
+  const link = post.channel.invite_url ?? tgPostUrl(post.channel, post.tg_message_id);
   const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     openTelegramLink(link);

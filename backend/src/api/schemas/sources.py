@@ -45,3 +45,12 @@ class QueueStatusOut(BaseModel):
 
 class SourceList(BaseModel):
     items: list[SourceListItem]
+
+
+class HiddenSourceItem(BaseModel):
+    channel: ChannelSummary
+    hidden_at: datetime
+
+
+class HiddenSourceList(BaseModel):
+    items: list[HiddenSourceItem]

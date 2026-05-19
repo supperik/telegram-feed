@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,7 @@ from shared.models import (
     Channel,
     ChannelSubscription,
     UserCatalogHiddenChannel,
+    UserHiddenChannel,
     UserSource,
 )
 from shared.repositories.channels import decrement_ref_count, increment_ref_count
@@ -37,6 +38,12 @@ async def add_user_source(
     )
     res = await session.execute(stmt)
     was_new = res.scalar_one_or_none() is not None
+    await session.execute(
+        delete(UserHiddenChannel).where(
+            UserHiddenChannel.user_id == user_id,
+            UserHiddenChannel.channel_id == channel_id,
+        )
+    )
     sub: ChannelSubscription | None = None
     if was_new:
         sub = await increment_ref_count(session, channel_id=channel_id)
@@ -60,6 +67,12 @@ async def remove_user_source(
         .returning(UserSource.user_id)
     )
     removed = res.scalar_one_or_none() is not None
+    await session.execute(
+        delete(UserHiddenChannel).where(
+            UserHiddenChannel.user_id == user_id,
+            UserHiddenChannel.channel_id == channel_id,
+        )
+    )
     if removed:
         await decrement_ref_count(session, channel_id=channel_id)
     return removed
@@ -68,6 +81,10 @@ async def remove_user_source(
 async def list_user_sources(
     session: AsyncSession, *, user_id: int
 ) -> list[UserSourceRow]:
+    hidden_q = exists().where(
+        UserHiddenChannel.user_id == user_id,
+        UserHiddenChannel.channel_id == Channel.id,
+    )
     stmt = (
         select(
             Channel.id,
@@ -79,7 +96,7 @@ async def list_user_sources(
         )
         .join(UserSource, UserSource.channel_id == Channel.id)
         .join(ChannelSubscription, ChannelSubscription.channel_id == Channel.id, isouter=True)
-        .where(UserSource.user_id == user_id, Channel.banned.is_(False))
+        .where(UserSource.user_id == user_id, Channel.banned.is_(False), ~hidden_q)
         .order_by(UserSource.added_at.desc())
     )
     res = await session.execute(stmt)

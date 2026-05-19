@@ -5,6 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+class _S:
+    """Stand-in for shared.config.Settings — only the fields the cap-helper reads."""
+    video_max_download_bytes = 20 * 1024 * 1024
+    video_max_download_seconds = 60
+
+
 @asynccontextmanager
 async def _fake_session_cm(session):
     yield session
@@ -74,8 +80,8 @@ def test_join_worker_happy_path(monkeypatch):
     sf = _fake_session_factory(session)
 
     async def driver():
-        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
-        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
+        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S())
+        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S())
 
     asyncio.run(driver())
 
@@ -111,7 +117,7 @@ def test_join_worker_handles_username_not_occupied(monkeypatch):
     monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
 
     sf = _fake_session_factory(session)
-    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media"))
+    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S()))
 
     fake_mark_failed.assert_awaited_once()
     args, kwargs = fake_mark_failed.call_args
@@ -170,6 +176,7 @@ def test_join_worker_registers_new_channel_in_chat_map(monkeypatch):
 
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
         chat_map=chat_map,
     ))
 
@@ -204,6 +211,7 @@ def test_join_worker_does_not_touch_chat_map_on_failed_join(monkeypatch):
 
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
         chat_map=chat_map,
     ))
 
@@ -240,7 +248,7 @@ def test_join_worker_handles_floodwait(monkeypatch):
     monkeypatch.setattr(jw.asyncio, "sleep", fake_sleep)
 
     sf = _fake_session_factory(session)
-    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media"))
+    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S()))
 
     fake_sleep.assert_awaited_once_with(4)  # 3 + 1
     fake_mark_failed.assert_not_called()
@@ -290,6 +298,7 @@ def test_join_worker_downloads_and_records_channel_photo(monkeypatch):
     sf = _fake_session_factory(session)
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
     ))
 
     fake_download_channel_photo.assert_awaited_once()
@@ -346,6 +355,7 @@ def test_join_worker_swallows_channel_photo_errors(monkeypatch):
     # Must NOT raise.
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
     ))
 
     # Join completed normally.
@@ -575,6 +585,7 @@ def test_handle_one_pending_private_registers_chat_map(monkeypatch):
 
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
         chat_map=chat_map,
     ))
 
@@ -585,6 +596,98 @@ def test_handle_one_pending_private_registers_chat_map(monkeypatch):
     )
     fake_join_private.assert_awaited_once()
     fake_backfill.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_post_join_writes_invite_hash_for_private_invite(monkeypatch):
+    """T8: for private-invite joins, _post_join must UPDATE channels SET
+    invite_hash so the just-created Channel row stores the hash we joined
+    via (used later to render invite_url in the feed and to re-join after
+    cache loss). The hash is the same value that came in on the queue row.
+    """
+    from ingester.join_worker import _post_join
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    monkeypatch.setattr(
+        "ingester.join_worker.upsert_channel",
+        AsyncMock(return_value=MagicMock(id=7, tg_chat_id=12345)),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.add_user_source", AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.mark_join_done", AsyncMock(),
+    )
+    row = MagicMock()
+    row.id = 1
+    row.requested_by_user_id = 42
+    row.kind = "private_invite"
+    row.invite_hash = "abc123"
+    chat = MagicMock()
+    chat.id = 12345
+    chat.username = None
+    chat.title = "Private chan"
+
+    await _post_join(session, row=row, chat=chat)
+
+    update_calls = session.execute.await_args_list
+    seen = False
+    for call in update_calls:
+        stmt = call.args[0]
+        try:
+            compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        except Exception:
+            compiled = str(stmt)
+        if "UPDATE channels" in compiled and "invite_hash" in compiled and "abc123" in compiled:
+            seen = True
+            break
+    assert seen, f"Expected UPDATE channels SET invite_hash for private_invite. Saw: {update_calls}"
+
+
+@pytest.mark.asyncio
+async def test_post_join_skips_invite_hash_for_public_username(monkeypatch):
+    """T8: for public-username joins, _post_join must NOT touch
+    channels.invite_hash — there's nothing meaningful to write (the
+    channel is public). Touching it would either store an empty string or
+    propagate `None` into a column that may already hold a valid hash from
+    a prior private-invite join of the same channel.
+    """
+    from ingester.join_worker import _post_join
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    monkeypatch.setattr(
+        "ingester.join_worker.upsert_channel",
+        AsyncMock(return_value=MagicMock(id=7, tg_chat_id=12345)),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.add_user_source", AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.mark_join_done", AsyncMock(),
+    )
+    row = MagicMock()
+    row.id = 1
+    row.requested_by_user_id = 42
+    row.kind = "public_username"
+    row.invite_hash = None
+    chat = MagicMock()
+    chat.id = 12345
+    chat.username = "meduzaproject"
+    chat.title = "Meduza"
+
+    await _post_join(session, row=row, chat=chat)
+
+    for call in session.execute.await_args_list:
+        stmt = call.args[0]
+        try:
+            compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        except Exception:
+            compiled = str(stmt)
+        assert "invite_hash" not in compiled, (
+            f"Did not expect invite_hash in UPDATE for public_username: {compiled}"
+        )
 
 
 def test_backfill_channel_downloads_media_for_solo_photo(monkeypatch):
@@ -632,7 +735,7 @@ def test_backfill_channel_downloads_media_for_solo_photo(monkeypatch):
 
     asyncio.run(jw._backfill_channel(
         fake_client, sf, minio, entity, channel_id=7,
-        limit=50, bucket="media",
+        limit=50, bucket="media", settings=_S(),
     ))
 
     fake_download.assert_awaited_once()

@@ -63,6 +63,7 @@ async def _backfill_channel(
     *,
     limit: int,
     bucket: str,
+    settings,
 ) -> None:
     """Fetch the most recent `limit` messages from `entity`, upsert each, and
     download its media.
@@ -97,6 +98,7 @@ async def _backfill_channel(
                         session, msg=msg, channel_id=channel_id,
                         post_id=new_id, media=media,
                         client=client, minio_client=minio_client, bucket=bucket,
+                        settings=settings,
                     )
             await session.commit()
 
@@ -109,6 +111,7 @@ async def _backfill_channel(
                     session, msg=msg, channel_id=channel_id,
                     new_post_id=new_id, media_values=media_values,
                     client=client, minio_client=minio_client, bucket=bucket,
+                    settings=settings,
                 )
             await session.commit()
 
@@ -123,7 +126,8 @@ async def _backfill_channel(
 
 
 async def _post_join(session, *, row, chat):
-    """Common tail of any successful join: upsert channel, link user_source, mark done.
+    """Common tail of any successful join: upsert channel, link user_source,
+    mark done, и (для private_invite) проставить channel.invite_hash.
 
     Used by both public-username flow and (T7) private-invite flow. Returns the
     Channel ORM object so callers can run backfill outside the session block
@@ -135,6 +139,12 @@ async def _post_join(session, *, row, chat):
         username=getattr(chat, "username", None),
         title=getattr(chat, "title", None) or getattr(chat, "username", None) or "(no title)",
     )
+    if row.kind == "private_invite" and row.invite_hash:
+        await session.execute(
+            update(Channel)
+            .where(Channel.id == channel.id)
+            .values(invite_hash=row.invite_hash)
+        )
     await add_user_source(
         session, user_id=row.requested_by_user_id, channel_id=channel.id
     )
@@ -297,6 +307,7 @@ async def _handle_one_pending(
     *,
     minio_client: Minio,
     bucket: str,
+    settings,
     chat_map: dict[int, int] | None = None,
 ) -> None:
     """Pop one pending join, attempt it, commit the outcome. No-op if empty.
@@ -332,7 +343,7 @@ async def _handle_one_pending(
             chat_map[_to_marked_chat_id(int(chat.id))] = channel_id
         await _backfill_channel(
             client, session_factory, minio_client, chat, channel_id,
-            limit=50, bucket=bucket,
+            limit=50, bucket=bucket, settings=settings,
         )
         return
 
@@ -438,7 +449,7 @@ async def _handle_one_pending(
     # Backfill happens outside the join session — it owns its own sessions.
     await _backfill_channel(
         client, session_factory, minio_client, entity, channel.id,
-        limit=50, bucket=bucket,
+        limit=50, bucket=bucket, settings=settings,
     )
 
 
@@ -448,6 +459,7 @@ async def run_join_worker(
     *,
     minio_client: Minio,
     bucket: str,
+    settings,
     chat_map: dict[int, int] | None = None,
     poll_interval_s: float = 2.0,
 ) -> None:
@@ -457,6 +469,7 @@ async def run_join_worker(
             await _handle_one_pending(
                 client, session_factory,
                 minio_client=minio_client, bucket=bucket,
+                settings=settings,
                 chat_map=chat_map,
             )
         except Exception as e:  # noqa: BLE001 — keep loop alive

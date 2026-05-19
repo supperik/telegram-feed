@@ -26,10 +26,10 @@ export function ChannelCatalogSection() {
         <h2 className="text-base font-semibold">Доступные каналы</h2>
         {hiddenCount > 0 ? (
           <Link
-            to="/sources/hidden"
+            to="/sources/catalog-hidden"
             className="rounded-full bg-secondary px-3 py-1 text-xs text-hint"
           >
-            Скрытые: {hiddenCount}
+            Скрытые из каталога: {hiddenCount}
           </Link>
         ) : null}
       </div>
