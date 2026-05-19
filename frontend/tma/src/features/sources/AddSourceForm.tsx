@@ -26,12 +26,11 @@ export function AddSourceForm() {
   return (
     <div className="mx-3 mt-3 rounded-2xl bg-secondary p-3 shadow-card">
       <div className="flex items-center gap-2">
-        <span className="flex h-7 w-7 select-none items-center justify-center text-base font-semibold text-hint">@</span>
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="@username или https://t.me/+..."
-          className="flex-1 bg-transparent text-[15px] outline-none placeholder:text-hint"
+          placeholder="@username или t.me/+..."
+          className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-hint"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -40,7 +39,7 @@ export function AddSourceForm() {
           type="button"
           onClick={handle}
           disabled={disabled}
-          className="rounded-full bg-button px-4 py-2 text-[13px] font-semibold text-button-text transition active:opacity-90 disabled:opacity-45"
+          className="shrink-0 rounded-full bg-button px-4 py-2 text-[13px] font-semibold text-button-text transition active:opacity-90 disabled:opacity-45"
         >
           {state.kind === 'submitting' ? '…' : 'Подписаться'}
         </button>
