@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     approval_timeout_days: int = 7
     approval_poll_interval_s: float = 1800.0
 
+    # Sliding-window rate limits (design §6.5).
+    rate_limit_auth_per_window: int = 5
+    rate_limit_auth_window_seconds: int = 60
+    rate_limit_sources_per_window: int = 30
+    rate_limit_sources_window_seconds: int = 3600
+
     @property
     def postgres_dsn(self) -> str:
         return (

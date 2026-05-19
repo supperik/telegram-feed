@@ -1,23 +1,10 @@
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from testcontainers.minio import MinioContainer
-
-
-@pytest.fixture(scope="session")
-def minio_container() -> Iterator[dict]:
-    """Session-scoped MinIO testcontainer. Yields {endpoint, access_key, secret_key}.
-
-    The default image pin in testcontainers (2022-12) is fine for e2e tests —
-    we only exercise bucket creation + put_object + get_object, all stable APIs.
-    """
-    with MinioContainer() as mc:
-        yield mc.get_config()
 
 
 @pytest_asyncio.fixture(autouse=True)

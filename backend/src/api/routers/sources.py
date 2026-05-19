@@ -9,6 +9,7 @@ from api.channel_photo import channel_photo_url
 from api.deps import get_current_user, get_db
 from api.errors import APIError
 from api.parse_source_input import ParseError, parse_source_input
+from api.rate_limit import sources_user_rate_limit
 from api.schemas.sources import (
     AddSourceIn,
     AddSourceOut,
@@ -41,6 +42,7 @@ router = APIRouter(prefix="/sources", tags=["sources"])
         200: {"model": AddSourceOut},
         202: {"model": AddSourceOut},
     },
+    dependencies=[Depends(sources_user_rate_limit)],
 )
 async def add_source(
     body: AddSourceIn,

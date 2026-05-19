@@ -50,6 +50,11 @@ def configured_env(pg_container, redis_container, monkeypatch):
     monkeypatch.setenv("MINIO_SECRET_KEY", "s")
     monkeypatch.setenv("API_JWT_SECRET", "x" * 32)
     monkeypatch.setenv("TG_BOT_TOKEN", "1234:test-bot-token")
+    # Small rate-limit windows so throttle tests can hit the cap quickly.
+    monkeypatch.setenv("RATE_LIMIT_AUTH_PER_WINDOW", "3")
+    monkeypatch.setenv("RATE_LIMIT_AUTH_WINDOW_SECONDS", "60")
+    monkeypatch.setenv("RATE_LIMIT_SOURCES_PER_WINDOW", "3")
+    monkeypatch.setenv("RATE_LIMIT_SOURCES_WINDOW_SECONDS", "3600")
     from shared.config import get_settings
     get_settings.cache_clear()
     yield

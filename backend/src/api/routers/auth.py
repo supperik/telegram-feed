@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db, get_settings
+from api.rate_limit import auth_ip_rate_limit
 from api.schemas.auth import RefreshIn, TelegramInitDataIn, TokenPair
 from shared.auth.initdata import verify_init_data
 from shared.auth.jwt import decode_refresh, encode_access, encode_refresh
@@ -13,7 +14,7 @@ from shared.repositories.users import upsert_user_by_tg_id
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/telegram", response_model=TokenPair)
+@router.post("/telegram", response_model=TokenPair, dependencies=[Depends(auth_ip_rate_limit)])
 async def telegram(
     body: TelegramInitDataIn,
     settings: Settings = Depends(get_settings),
