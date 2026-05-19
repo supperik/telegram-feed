@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime, timezone
 
 import pytest
@@ -21,9 +22,7 @@ def test_catalog_cursor_hidden_initial_is_max_time() -> None:
 
 def test_catalog_cursor_available_roundtrip() -> None:
     c = CatalogCursor.available(posts_count=42, channel_id=7)
-    s = c.encode()
-    assert "available" in CatalogCursor.decode(s).view
-    decoded = CatalogCursor.decode(s)
+    decoded = CatalogCursor.decode(c.encode())
     assert decoded.posts_count == 42
     assert decoded.channel_id == 7
     assert decoded.view == "available"
@@ -38,7 +37,20 @@ def test_catalog_cursor_hidden_roundtrip() -> None:
     assert decoded.view == "hidden"
 
 
-def test_catalog_cursor_bad_string_raises_api_error() -> None:
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        "not-a-cursor",
+        base64.urlsafe_b64encode(b"nopipes").decode().rstrip("="),
+        base64.urlsafe_b64encode(b"a|42").decode().rstrip("="),     # missing second pipe
+        base64.urlsafe_b64encode(b"x|1|2").decode().rstrip("="),    # unknown tag
+        base64.urlsafe_b64encode(b"h|not-a-date|7").decode().rstrip("="),  # bad ISO
+        base64.urlsafe_b64encode(b"a|not-int|7").decode().rstrip("="),     # bad int
+    ],
+)
+def test_catalog_cursor_rejects_malformed(bad: str) -> None:
     with pytest.raises(APIError) as exc:
-        CatalogCursor.decode("not-a-cursor")
+        CatalogCursor.decode(bad)
     assert exc.value.code == "bad_cursor"
+    assert exc.value.status_code == 400
