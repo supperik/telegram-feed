@@ -537,3 +537,109 @@ async def test_join_private_user_already_participant_race(monkeypatch):
     assert result is not None
     assert result[0] is chat
     post_join.assert_awaited_once()
+
+
+def test_handle_one_pending_private_registers_chat_map(monkeypatch):
+    """After a successful private-invite join, _handle_one_pending must add
+    {_to_marked_chat_id(chat.id): channel_id} to chat_map. Without this,
+    the live NewMessage handler keeps ignoring events from the new private
+    channel until the next ingester restart loads it via _load_active_chat_map.
+    The public branch already does this in line 364-365; the private branch
+    forgot to mirror that behaviour and silently swallowed every live post.
+    """
+    from ingester import join_worker as jw
+    from ingester.live import _to_marked_chat_id
+
+    pending = MagicMock(
+        id=42, kind="private_invite", invite_hash="abc12345",
+        channel_username=None, channel_id=None, requested_by_user_id=7,
+    )
+    chat = MagicMock(id=5566778899, username=None, title="Secret Channel")
+
+    fake_pop = AsyncMock(side_effect=[pending, None])
+    fake_join_private = AsyncMock(return_value=(chat, 314))
+    fake_backfill = AsyncMock()
+
+    fake_client = MagicMock()
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.execute = AsyncMock()
+
+    monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
+    monkeypatch.setattr(jw, "_join_private", fake_join_private)
+    monkeypatch.setattr(jw, "_backfill_channel", fake_backfill)
+
+    sf = _fake_session_factory(session)
+    chat_map: dict[int, int] = {}
+
+    asyncio.run(jw._handle_one_pending(
+        fake_client, sf, minio_client=MagicMock(), bucket="media",
+        chat_map=chat_map,
+    ))
+
+    expected_marked = _to_marked_chat_id(5566778899)
+    assert chat_map == {expected_marked: 314}, (
+        f"private branch must register {expected_marked!r} -> 314; "
+        f"got {chat_map!r}"
+    )
+    fake_join_private.assert_awaited_once()
+    fake_backfill.assert_awaited_once()
+
+
+def test_backfill_channel_downloads_media_for_solo_photo(monkeypatch):
+    """_backfill_channel must actually download media (not just insert Media
+    rows with storage_key=NULL) so newly joined channels show thumbnails
+    immediately, without waiting for the next ingester boot to run
+    backfill_recent_media."""
+    from ingester import join_worker as jw
+
+    msg = MagicMock(id=42)
+    msg.photo = MagicMock()  # photo present
+    msg.video = None
+    msg.document = None
+    msg.grouped_id = None  # solo, not part of an album
+
+    async def gen():
+        yield msg
+
+    fake_client = MagicMock()
+    fake_client.iter_messages = MagicMock(return_value=gen())
+
+    fake_normalize = MagicMock(return_value=(
+        {"channel_id": 7, "tg_message_id": 42, "tg_grouped_id": None,
+         "text": None, "text_html": None, "posted_at": None,
+         "edited_at": None, "views": None, "forwards": None},
+        [{"type": "photo", "storage_key": None, "tg_file_id": "p1",
+          "width": None, "height": None, "duration": None,
+          "size_bytes": None, "position": 0}],
+    ))
+    fake_upsert = AsyncMock(return_value=100)  # new post id
+    fake_download = AsyncMock()
+
+    monkeypatch.setattr(jw, "normalize_message", fake_normalize)
+    monkeypatch.setattr(jw, "upsert_post", fake_upsert)
+    monkeypatch.setattr(jw, "download_and_set_storage_keys", fake_download,
+                        raising=False)
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.execute = AsyncMock()
+    sf = _fake_session_factory(session)
+
+    entity = MagicMock()
+    minio = MagicMock()
+
+    asyncio.run(jw._backfill_channel(
+        fake_client, sf, minio, entity, channel_id=7,
+        limit=50, bucket="media",
+    ))
+
+    fake_download.assert_awaited_once()
+    _, kwargs = fake_download.call_args
+    assert kwargs["channel_id"] == 7
+    assert kwargs["new_post_id"] == 100
+    assert kwargs["msg"] is msg
+    assert kwargs["bucket"] == "media"
+    assert kwargs["client"] is fake_client
+    assert kwargs["minio_client"] is minio

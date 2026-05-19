@@ -25,8 +25,12 @@ from telethon.tl.functions.messages import (
 )
 from telethon.tl.types import ChatInviteAlready
 
-from ingester.live import _to_marked_chat_id
-from ingester.normalize import normalize_message
+from ingester.live import (
+    _download_one_and_update_storage_key,
+    _to_marked_chat_id,
+    download_and_set_storage_keys,
+)
+from ingester.normalize import normalize_album, normalize_message
 from ingester.photos import download_and_store_channel_photo
 from shared.models import Channel, ChannelSubscription
 from shared.repositories.channels import upsert_channel
@@ -60,17 +64,52 @@ async def _backfill_channel(
     limit: int,
     bucket: str,
 ) -> None:
-    """Fetch the most recent `limit` messages from `entity` and upsert each.
+    """Fetch the most recent `limit` messages from `entity`, upsert each, and
+    download its media.
 
-    NOTE: P4 keeps backfill simple — no photo download in backfill yet,
-    only live and catchup download. This is a tradeoff: backfill stays fast
-    at the cost of older posts initially having no thumbnails. Live ingest
-    downloads everything going forward.
+    Groups consecutive media-group messages into a single Post with N Media
+    rows, then downloads photos / video-thumbs and writes storage_key. Mirrors
+    catchup_channels (live.py) so freshly joined channels show thumbnails
+    immediately instead of waiting for the next ingester boot to run
+    backfill_recent_media.
     """
+    collected = []
     async for msg in client.iter_messages(entity, limit=limit):
+        collected.append(msg)
+
+    albums: dict[int, list] = {}
+    solos: list = []
+    for m in collected:
+        gid = getattr(m, "grouped_id", None)
+        if gid is not None:
+            albums.setdefault(int(gid), []).append(m)
+        else:
+            solos.append(m)
+
+    for msgs in albums.values():
+        post_values, media_values = normalize_album(msgs, channel_id)
+        async with session_factory() as session:
+            new_id = await upsert_post(session, post_values, media_values)
+            if new_id is not None:
+                ordered = sorted(msgs, key=lambda mm: int(mm.id))
+                for media, msg in zip(media_values, ordered):
+                    await _download_one_and_update_storage_key(
+                        session, msg=msg, channel_id=channel_id,
+                        post_id=new_id, media=media,
+                        client=client, minio_client=minio_client, bucket=bucket,
+                    )
+            await session.commit()
+
+    for msg in solos:
         post_values, media_values = normalize_message(msg, channel_id)
         async with session_factory() as session:
-            await upsert_post(session, post_values, media_values)
+            new_id = await upsert_post(session, post_values, media_values)
+            if new_id is not None:
+                await download_and_set_storage_keys(
+                    session, msg=msg, channel_id=channel_id,
+                    new_post_id=new_id, media_values=media_values,
+                    client=client, minio_client=minio_client, bucket=bucket,
+                )
             await session.commit()
 
     # After backfill, mark subscription active.
@@ -289,6 +328,8 @@ async def _handle_one_pending(
         if outcome is None:
             return  # already logged + marked
         chat, channel_id = outcome
+        if chat_map is not None:
+            chat_map[_to_marked_chat_id(int(chat.id))] = channel_id
         await _backfill_channel(
             client, session_factory, minio_client, chat, channel_id,
             limit=50, bucket=bucket,
