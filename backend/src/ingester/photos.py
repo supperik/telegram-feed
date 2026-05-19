@@ -127,3 +127,40 @@ async def download_and_store_channel_photo(
         content_type="image/jpeg",
     )
     return key
+
+
+async def download_and_store_video(
+    client: TelegramClient,
+    minio_client: Minio,
+    msg: Any,
+    *,
+    channel_id: int,
+    bucket: str,
+) -> str | None:
+    """Download msg.video and upload to MinIO. Returns the storage key or None.
+
+    Skipped here (returns None) only when the message has no video or the
+    download yields empty bytes. Cap-by-size logic lives in
+    `_maybe_download_full_video` so callers can decide whether to call this
+    at all.
+    """
+    video = msg.video
+    if video is None:
+        return None
+    data = await client.download_media(msg, bytes)
+    if not data:
+        try:
+            log.warning("photos.empty_video", channel_id=channel_id, msg_id=msg.id)
+        except ValueError:
+            pass
+        return None
+
+    key = f"videos/{channel_id}/{msg.id}_{video.id}.mp4"
+    minio_client.put_object(
+        bucket,
+        key,
+        BytesIO(data),
+        length=len(data),
+        content_type="video/mp4",
+    )
+    return key
