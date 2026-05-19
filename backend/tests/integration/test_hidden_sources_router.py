@@ -16,7 +16,7 @@ def _auth(user_id: int) -> dict[str, str]:
 async def test_get_hidden_returns_subscribed_hidden(
     async_client, db_session, seed_user
 ) -> None:
-    uid = await seed_user(tg_user_id=61)
+    uid = await seed_user(tg_user_id=6101)
     ch = Channel(tg_chat_id=61001, username="hid_one", title="Hidden One")
     db_session.add(ch)
     await db_session.commit()
@@ -38,7 +38,7 @@ async def test_get_hidden_returns_subscribed_hidden(
 async def test_get_hidden_excludes_unsubscribed(
     async_client, db_session, seed_user
 ) -> None:
-    uid = await seed_user(tg_user_id=62)
+    uid = await seed_user(tg_user_id=6102)
     ch = Channel(tg_chat_id=62001, username="orphan", title="Orphan")
     db_session.add(ch)
     await db_session.commit()
@@ -55,8 +55,8 @@ async def test_get_hidden_excludes_unsubscribed(
 async def test_get_hidden_isolates_users(
     async_client, db_session, seed_user
 ) -> None:
-    uid_a = await seed_user(tg_user_id=63)
-    uid_b = await seed_user(tg_user_id=64)
+    uid_a = await seed_user(tg_user_id=6103)
+    uid_b = await seed_user(tg_user_id=6104)
     ch = Channel(tg_chat_id=63001, username="iso2", title="Iso2")
     db_session.add(ch)
     await db_session.commit()
@@ -78,7 +78,7 @@ async def test_get_hidden_isolates_users(
 async def test_delete_hide_unhides_and_is_idempotent(
     async_client, db_session, seed_user
 ) -> None:
-    uid = await seed_user(tg_user_id=65)
+    uid = await seed_user(tg_user_id=6105)
     ch = Channel(tg_chat_id=65001, username="uh_api", title="UH API")
     db_session.add(ch)
     await db_session.commit()

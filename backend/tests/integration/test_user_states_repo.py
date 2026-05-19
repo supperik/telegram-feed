@@ -59,7 +59,7 @@ async def test_hide_post_and_channel_are_idempotent(db_session, seed_user) -> No
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_unhide_channel_is_idempotent(db_session, seed_user) -> None:
-    uid = await seed_user(tg_user_id=51)
+    uid = await seed_user(tg_user_id=5101)
     ch = Channel(tg_chat_id=91101, username="uh", title="UH")
     db_session.add(ch)
     await db_session.commit()
@@ -82,10 +82,10 @@ async def test_unhide_channel_is_idempotent(db_session, seed_user) -> None:
 async def test_list_hidden_channels_returns_subscribed_hidden_sorted(
     db_session, seed_user
 ) -> None:
-    uid = await seed_user(tg_user_id=52)
-    ch_a = Channel(tg_chat_id=91201, username="a", title="A")
-    ch_b = Channel(tg_chat_id=91202, username="b", title="B")
-    ch_other = Channel(tg_chat_id=91203, username="o", title="O")  # hidden but not subscribed
+    uid = await seed_user(tg_user_id=5102)
+    ch_a = Channel(tg_chat_id=91201, username="lh_a", title="A")
+    ch_b = Channel(tg_chat_id=91202, username="lh_b", title="B")
+    ch_other = Channel(tg_chat_id=91203, username="lh_o", title="O")  # hidden but not subscribed
     db_session.add_all([ch_a, ch_b, ch_other])
     await db_session.commit()
 
@@ -104,7 +104,7 @@ async def test_list_hidden_channels_returns_subscribed_hidden_sorted(
 
     rows = await list_hidden_channels(db_session, user_id=uid)
     assert [r.channel_id for r in rows] == [ch_b.id, ch_a.id]
-    assert rows[0].channel_username == "b"
+    assert rows[0].channel_username == "lh_b"
     assert rows[0].channel_title == "B"
     assert rows[0].hidden_at is not None
 
@@ -112,8 +112,8 @@ async def test_list_hidden_channels_returns_subscribed_hidden_sorted(
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_list_hidden_channels_isolates_by_user(db_session, seed_user) -> None:
-    uid_one = await seed_user(tg_user_id=53)
-    uid_two = await seed_user(tg_user_id=54)
+    uid_one = await seed_user(tg_user_id=5103)
+    uid_two = await seed_user(tg_user_id=5104)
     ch = Channel(tg_chat_id=91301, username="iso", title="ISO")
     db_session.add(ch)
     await db_session.commit()
@@ -135,7 +135,7 @@ async def test_list_hidden_channels_isolates_by_user(db_session, seed_user) -> N
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_list_hidden_channels_excludes_banned(db_session, seed_user) -> None:
-    uid = await seed_user(tg_user_id=55)
+    uid = await seed_user(tg_user_id=5105)
     ch_ok = Channel(tg_chat_id=91401, username="ok", title="OK")
     ch_banned = Channel(tg_chat_id=91402, username="bad", title="BAD", banned=True)
     db_session.add_all([ch_ok, ch_banned])
