@@ -41,7 +41,7 @@ export function SourceListItem({ item }: Props) {
           {pending ? ' · подгружаем…' : null}
         </div>
       </div>
-      <IconButton aria-label="Скрыть" size={32} onClick={() => hide.mutate(c.id)}>
+      <IconButton aria-label="Скрыть" size={32} onClick={() => hide.mutate(item)}>
         <EyeOffIcon size={16} />
       </IconButton>
       <IconButton aria-label="Удалить" size={32} variant="danger" onClick={onDelete}>

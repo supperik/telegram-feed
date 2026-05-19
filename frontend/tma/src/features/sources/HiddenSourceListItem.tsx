@@ -39,7 +39,7 @@ export function HiddenSourceListItem({ item }: Props) {
           )}
         </div>
       </div>
-      <IconButton aria-label="Вернуть в ленту" size={32} onClick={() => unhide.mutate(c.id)}>
+      <IconButton aria-label="Вернуть в ленту" size={32} onClick={() => unhide.mutate(item)}>
         <EyeIcon size={16} />
       </IconButton>
       <IconButton aria-label="Удалить" size={32} variant="danger" onClick={onDelete}>
