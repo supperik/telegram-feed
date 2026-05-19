@@ -52,3 +52,17 @@ class UserHiddenChannel(Base):
         BigInteger, ForeignKey("channels.id"), primary_key=True
     )
     hidden_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserCatalogHiddenChannel(Base):
+    __tablename__ = "user_catalog_hidden_channels"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    channel_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("channels.id"), primary_key=True
+    )
+    hidden_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

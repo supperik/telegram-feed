@@ -34,3 +34,21 @@ def test_models_round_trip(configured_env, pg_container):
         await engine.dispose()
 
     asyncio.run(run())
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_user_catalog_hidden_channel_insert(db_session, seed_user) -> None:
+    from shared.models import Channel, UserCatalogHiddenChannel
+
+    uid = await seed_user(tg_user_id=901)
+    ch = Channel(tg_chat_id=900001, username="x_cat", title="X")
+    db_session.add(ch)
+    await db_session.commit()
+
+    db_session.add(UserCatalogHiddenChannel(user_id=uid, channel_id=ch.id))
+    await db_session.commit()
+
+    row = await db_session.get(UserCatalogHiddenChannel, (uid, ch.id))
+    assert row is not None
+    assert row.hidden_at is not None

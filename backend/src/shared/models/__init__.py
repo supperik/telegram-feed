@@ -6,6 +6,7 @@ from shared.models.post import Post
 from shared.models.queue import ChannelJoinQueue, ChannelSubscription
 from shared.models.user import User
 from shared.models.user_state import (
+    UserCatalogHiddenChannel,
     UserHiddenChannel,
     UserHiddenPost,
     UserSavedPost,
@@ -21,6 +22,7 @@ __all__ = [
     "UserSource",
     "UserSavedPost",
     "UserHiddenPost",
+    "UserCatalogHiddenChannel",
     "UserHiddenChannel",
     "Admin",
     "AdminAction",
