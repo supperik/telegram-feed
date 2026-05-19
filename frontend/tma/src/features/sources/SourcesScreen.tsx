@@ -1,4 +1,5 @@
 import { useSources } from '@/features/sources/useSources';
+import { useHiddenSources } from '@/features/sources/useHiddenSources';
 import { AddSourceForm } from '@/features/sources/AddSourceForm';
 import { HiddenSourcesSection } from '@/features/sources/HiddenSourcesSection';
 import { SourceListItem } from '@/features/sources/SourceListItem';
@@ -8,6 +9,7 @@ import { GridIcon } from '@/shared/ui/icons';
 
 export function SourcesScreen() {
   const { data, status } = useSources();
+  const hidden = useHiddenSources();
 
   if (status === 'pending') {
     return <div className="flex h-full items-center justify-center"><Spinner /></div>;
@@ -16,29 +18,31 @@ export function SourcesScreen() {
     return <div className="p-6 text-center text-hint">Не удалось загрузить источники.</div>;
   }
 
-  const count = data.items.length;
+  const visibleCount = data.items.length;
+  const hiddenCount = hidden.data?.items.length ?? 0;
+  const totalCount = visibleCount + hiddenCount;
   return (
     <div>
       <header className="px-4 pb-1 pt-3">
         <h1 className="text-2xl font-bold tracking-tight">Источники</h1>
         <div className="mt-0.5 text-xs text-hint">
-          {count === 0 ? 'пока пусто' : `${count} ${pluralChannels(count)}`}
+          {totalCount === 0 ? 'пока пусто' : `${totalCount} ${pluralChannels(totalCount)}`}
         </div>
       </header>
 
       <AddSourceForm />
 
-      {count === 0 ? (
+      {totalCount === 0 ? (
         <EmptyState
           icon={<GridIcon />}
           title="Подключите первый канал"
           body="Введите @username публичного канала — посты появятся в ленте."
         />
-      ) : (
+      ) : visibleCount > 0 ? (
         <ul className="mx-3 mb-20 overflow-hidden rounded-2xl bg-secondary shadow-card">
           {data.items.map((i) => <SourceListItem key={i.channel.id} item={i} />)}
         </ul>
-      )}
+      ) : null}
 
       <HiddenSourcesSection />
     </div>

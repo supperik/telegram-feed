@@ -95,3 +95,20 @@ async def test_remove_user_source_clears_hidden(db_session, seed_user) -> None:
     await remove_user_source(db_session, user_id=user_id, channel_id=ch.id)
     await db_session.commit()
     assert await db_session.get(UserHiddenChannel, (user_id, ch.id)) is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_user_sources_excludes_hidden(db_session, seed_user) -> None:
+    user_id = await seed_user(tg_user_id=7)
+    ch_a = Channel(tg_chat_id=10007, username="lus_a", title="A")
+    ch_b = Channel(tg_chat_id=10008, username="lus_b", title="B")
+    db_session.add_all([ch_a, ch_b])
+    await db_session.commit()
+    await add_user_source(db_session, user_id=user_id, channel_id=ch_a.id)
+    await add_user_source(db_session, user_id=user_id, channel_id=ch_b.id)
+    await hide_channel(db_session, user_id=user_id, channel_id=ch_b.id)
+    await db_session.commit()
+
+    rows = await list_user_sources(db_session, user_id=user_id)
+    assert [r.channel_id for r in rows] == [ch_a.id]

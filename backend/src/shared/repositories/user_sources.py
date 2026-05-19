@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +69,10 @@ async def remove_user_source(
 async def list_user_sources(
     session: AsyncSession, *, user_id: int
 ) -> list[UserSourceRow]:
+    hidden_q = exists().where(
+        UserHiddenChannel.user_id == user_id,
+        UserHiddenChannel.channel_id == Channel.id,
+    )
     stmt = (
         select(
             Channel.id,
@@ -80,7 +84,7 @@ async def list_user_sources(
         )
         .join(UserSource, UserSource.channel_id == Channel.id)
         .join(ChannelSubscription, ChannelSubscription.channel_id == Channel.id, isouter=True)
-        .where(UserSource.user_id == user_id, Channel.banned.is_(False))
+        .where(UserSource.user_id == user_id, Channel.banned.is_(False), ~hidden_q)
         .order_by(UserSource.added_at.desc())
     )
     res = await session.execute(stmt)
