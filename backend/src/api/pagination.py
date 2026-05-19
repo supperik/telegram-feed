@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from api.errors import APIError
@@ -18,7 +18,7 @@ class FeedCursor:
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
     @classmethod
-    def decode(cls, s: str) -> "FeedCursor":
+    def decode(cls, s: str) -> FeedCursor:
         try:
             padded = s + "=" * (-len(s) % 4)
             raw = base64.urlsafe_b64decode(padded.encode()).decode()
@@ -28,10 +28,42 @@ class FeedCursor:
             raise APIError(code="bad_cursor", message="Cursor is malformed", status_code=400) from e
 
     @classmethod
-    def initial(cls) -> "FeedCursor":
+    def initial(cls) -> FeedCursor:
         # Far future + post_id=0 so the keyset predicate `(posted_at, id) < cursor`
         # returns the latest post first.
-        return cls(posted_at=datetime(9999, 12, 31, tzinfo=timezone.utc), post_id=0)
+        return cls(posted_at=datetime(9999, 12, 31, tzinfo=UTC), post_id=0)
+
+
+@dataclass(frozen=True)
+class PostListCursor:
+    """Keyset cursor for /posts/saved and /posts/hidden.
+
+    Sort key is `(sort_at, post_id)` where sort_at is the saved_at or
+    hidden_at timestamp depending on the endpoint. Same encoding shape for
+    both — the endpoint knows which it asked for.
+    """
+    sort_at: datetime
+    post_id: int
+
+    def encode(self) -> str:
+        raw = f"{self.sort_at.isoformat()}|{self.post_id}".encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    @classmethod
+    def decode(cls, s: str) -> PostListCursor:
+        try:
+            padded = s + "=" * (-len(s) % 4)
+            raw = base64.urlsafe_b64decode(padded.encode()).decode()
+            sort_at, pid = raw.split("|", 1)
+            return cls(sort_at=datetime.fromisoformat(sort_at), post_id=int(pid))
+        except Exception as e:  # noqa: BLE001
+            raise APIError(
+                code="bad_cursor", message="Cursor is malformed", status_code=400
+            ) from e
+
+    @classmethod
+    def initial(cls) -> PostListCursor:
+        return cls(sort_at=datetime(9999, 12, 31, tzinfo=UTC), post_id=0)
 
 
 @dataclass(frozen=True)
@@ -48,16 +80,16 @@ class CatalogCursor:
     channel_id: int
 
     @classmethod
-    def available(cls, *, posts_count: int, channel_id: int) -> "CatalogCursor":
+    def available(cls, *, posts_count: int, channel_id: int) -> CatalogCursor:
         return cls(
             view="available",
             posts_count=posts_count,
-            hidden_at=datetime(1970, 1, 1, tzinfo=timezone.utc),
+            hidden_at=datetime(1970, 1, 1, tzinfo=UTC),
             channel_id=channel_id,
         )
 
     @classmethod
-    def hidden(cls, *, hidden_at: datetime, channel_id: int) -> "CatalogCursor":
+    def hidden(cls, *, hidden_at: datetime, channel_id: int) -> CatalogCursor:
         return cls(
             view="hidden",
             posts_count=0,
@@ -66,15 +98,15 @@ class CatalogCursor:
         )
 
     @classmethod
-    def initial_available(cls) -> "CatalogCursor":
+    def initial_available(cls) -> CatalogCursor:
         # posts_count > any real value; channel_id=0 so the keyset
         # predicate (posts_count, channel_id) < cursor matches every row.
         return cls.available(posts_count=2_000_000_000, channel_id=0)
 
     @classmethod
-    def initial_hidden(cls) -> "CatalogCursor":
+    def initial_hidden(cls) -> CatalogCursor:
         return cls.hidden(
-            hidden_at=datetime(9999, 12, 31, tzinfo=timezone.utc),
+            hidden_at=datetime(9999, 12, 31, tzinfo=UTC),
             channel_id=0,
         )
 
@@ -86,7 +118,7 @@ class CatalogCursor:
         return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
     @classmethod
-    def decode(cls, s: str) -> "CatalogCursor":
+    def decode(cls, s: str) -> CatalogCursor:
         try:
             padded = s + "=" * (-len(s) % 4)
             raw = base64.urlsafe_b64decode(padded.encode()).decode()

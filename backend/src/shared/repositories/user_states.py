@@ -40,6 +40,14 @@ async def hide_post(session: AsyncSession, *, user_id: int, post_id: int) -> Non
     )
 
 
+async def unhide_post(session: AsyncSession, *, user_id: int, post_id: int) -> None:
+    await session.execute(
+        delete(UserHiddenPost).where(
+            UserHiddenPost.user_id == user_id, UserHiddenPost.post_id == post_id
+        )
+    )
+
+
 async def hide_channel(session: AsyncSession, *, user_id: int, channel_id: int) -> None:
     await session.execute(
         pg_insert(UserHiddenChannel)

@@ -9,6 +9,7 @@ from shared.repositories.user_states import (
     list_hidden_channels,
     save_post,
     unhide_channel,
+    unhide_post,
     unsave_post,
 )
 
@@ -54,6 +55,31 @@ async def test_hide_post_and_channel_are_idempotent(db_session, seed_user) -> No
     await hide_channel(db_session, user_id=uid, channel_id=ch.id)
     await db_session.commit()
     assert await db_session.get(UserHiddenChannel, (uid, ch.id)) is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_unhide_post_is_idempotent(db_session, seed_user) -> None:
+    uid = await seed_user(tg_user_id=5201)
+    ch = Channel(tg_chat_id=92101, username="uhp", title="UHP")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=1, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+
+    await hide_post(db_session, user_id=uid, post_id=p.id)
+    await db_session.commit()
+    assert await db_session.get(UserHiddenPost, (uid, p.id)) is not None
+
+    await unhide_post(db_session, user_id=uid, post_id=p.id)
+    await db_session.commit()
+    assert await db_session.get(UserHiddenPost, (uid, p.id)) is None
+
+    # Second unhide on the already-removed row must be a no-op, not an error.
+    await unhide_post(db_session, user_id=uid, post_id=p.id)
+    await db_session.commit()
+    assert await db_session.get(UserHiddenPost, (uid, p.id)) is None
 
 
 @pytest.mark.integration
