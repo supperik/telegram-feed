@@ -59,6 +59,15 @@ export interface SourceList {
   items: SourceListItem[];
 }
 
+export interface HiddenSourceItem {
+  channel: ChannelSummary;
+  hidden_at: string;
+}
+
+export interface HiddenSourceList {
+  items: HiddenSourceItem[];
+}
+
 export type QueueStatus = 'pending' | 'in_progress' | 'pending_approval' | 'done' | 'failed';
 
 export interface QueueStatusOut {
