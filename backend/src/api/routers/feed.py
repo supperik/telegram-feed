@@ -57,6 +57,11 @@ async def get_feed(
                 username=row.channel_username,
                 title=row.channel_title,
                 photo_url=channel_photo_url(row.channel_id, row.channel_photo_storage_key),
+                invite_url=(
+                    f"https://t.me/+{row.channel_invite_hash}"
+                    if row.channel_invite_hash
+                    else None
+                ),
             ),
             media=[
                 FeedMedia(
@@ -65,6 +70,7 @@ async def get_feed(
                     width=m.width,
                     height=m.height,
                     duration=m.duration,
+                    has_video_file=bool(m.video_storage_key),
                 )
                 for m in row.media
             ],
