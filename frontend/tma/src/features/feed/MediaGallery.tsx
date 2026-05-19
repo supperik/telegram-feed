@@ -21,6 +21,13 @@ function mediaUrl(id: number): string {
     : `${BASE}/media/${id}`;
 }
 
+function videoUrl(id: number): string {
+  const tokens = getTokens();
+  return tokens
+    ? `${BASE}/media/${id}/video?token=${encodeURIComponent(tokens.access_token)}`
+    : `${BASE}/media/${id}/video`;
+}
+
 type Variant = 'one' | 'two' | 'three' | 'four' | 'five';
 
 function variantFor(n: number): Variant {
@@ -71,9 +78,28 @@ function Tile({ m, channel, tgMessageId, overlay, onOpenPhoto }: TileProps) {
     );
   }
   if (m.type === 'video') {
-    // Backend doesn't serve video bytes (only thumbnails), so playing it
-    // inside the TMA isn't possible yet — tap takes the user straight to
-    // the Telegram client where the video plays natively.
+    if (m.has_video_file) {
+      return (
+        <div className="relative h-full w-full overflow-hidden bg-black">
+          <video
+            data-testid="inline-video"
+            src={videoUrl(m.id)}
+            poster={mediaUrl(m.id)}
+            controls
+            playsInline
+            preload="metadata"
+            className="h-full w-full object-contain"
+          />
+          {overlay ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-semibold text-white">
+              {overlay}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+    // No short-video bytes stored — fall back to the thumb tile and let the
+    // user open the post in Telegram, where the video plays natively.
     const link = tgPostUrl(channel, tgMessageId);
     const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
       e.preventDefault();

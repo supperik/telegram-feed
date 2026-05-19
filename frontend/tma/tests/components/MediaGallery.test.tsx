@@ -19,6 +19,18 @@ function makePhotos(n: number): FeedMedia[] {
   }));
 }
 
+function videoMedia(overrides: Partial<FeedMedia> = {}): FeedMedia {
+  return {
+    id: 1,
+    type: 'video',
+    width: 800,
+    height: 600,
+    duration: 30,
+    has_video_file: false,
+    ...overrides,
+  };
+}
+
 describe('MediaGallery', () => {
   it('renders nothing for empty media', () => {
     const { container } = render(<MediaGallery media={[]} channel={channel} tgMessageId={1} />);
@@ -74,6 +86,24 @@ describe('MediaGallery', () => {
     );
     const a = container.querySelector('a[href^="https://t.me/c/"]');
     expect(a?.getAttribute('href')).toBe('https://t.me/c/1319248631/42');
+  });
+});
+
+describe('MediaGallery — video tile', () => {
+  it('falls back to thumb-tile when has_video_file is false', () => {
+    render(<MediaGallery media={[videoMedia()]} channel={channel} tgMessageId={1} />);
+    expect(screen.queryByTestId('inline-video')).toBeNull();
+    // Existing thumb-tile renders an anchor (current behavior)
+    expect(screen.getByRole('link')).toBeInTheDocument();
+  });
+
+  it('renders inline <video> when has_video_file is true', () => {
+    const m = videoMedia({ has_video_file: true });
+    render(<MediaGallery media={[m]} channel={channel} tgMessageId={1} />);
+    const v = screen.getByTestId('inline-video') as HTMLVideoElement;
+    expect(v.tagName).toBe('VIDEO');
+    expect(v.getAttribute('src')).toContain(`/media/${m.id}/video`);
+    expect(v.getAttribute('poster')).toContain(`/media/${m.id}`);
   });
 });
 
