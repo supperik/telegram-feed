@@ -31,6 +31,14 @@ def _result_scalar_one(value):
     return r
 
 
+def _result_scalars_all(values):
+    r = MagicMock()
+    inner = MagicMock()
+    inner.all = MagicMock(return_value=values)
+    r.scalars = MagicMock(return_value=inner)
+    return r
+
+
 def test_merge_no_targets_returns_zero():
     from ingester import merge_existing_albums as mod
 
@@ -120,9 +128,11 @@ def test_merge_three_sibling_posts_into_one_with_three_media():
         if n == 2:
             return _result_scalar_one(0)  # max(position) on head=0 (one media there)
         if n == 3:
-            return _result_with_all([(2001,)])  # media ids of tail post 101
+            return _result_scalars_all(["headfile"])  # existing tg_file_ids on head
         if n == 4:
-            return _result_with_all([(2002,)])  # media ids of tail post 102
+            return _result_with_all([(2001, "tailA")])  # tail post 101 media
+        if n == 5:
+            return _result_with_all([(2002, "tailB")])  # tail post 102 media
         # remaining executions (updates/deletes) — return generic MagicMock.
         return MagicMock()
 
@@ -165,6 +175,62 @@ def test_merge_handles_deleted_telegram_message_gracefully():
     assert n == 0
     # No UPDATE/DELETE — only the initial SELECT.
     assert session.execute.await_count == 1
+
+
+def test_merge_deletes_tail_media_already_present_on_head_instead_of_moving():
+    """If the tail post has a Media row with a tg_file_id that already
+    lives on the head post (legacy data accidentally ingested twice),
+    moving it would violate the new UNIQUE(post_id, tg_file_id) index.
+    The merge must DELETE such a duplicate row instead of UPDATE-ing it."""
+    from ingester import merge_existing_albums as mod
+
+    fake_client = MagicMock()
+    fake_client.get_entity = AsyncMock(return_value=MagicMock())
+    msgs = []
+    for mid in (10, 11):
+        m = MagicMock(id=mid)
+        m.grouped_id = 999
+        msgs.append(m)
+    fake_client.get_messages = AsyncMock(return_value=msgs)
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    call = {"n": 0}
+    seen = {"updates": 0, "deletes_media": 0}
+
+    def execute_side_effect(*args, **kwargs):
+        call["n"] += 1
+        n = call["n"]
+        if n == 1:
+            # targets: two siblings — head id=100/msg=10, tail id=101/msg=11
+            return _result_with_all([(100, 10, 7, -100), (101, 11, 7, -100)])
+        if n == 2:
+            return _result_scalar_one(0)  # max(position) on head
+        if n == 3:
+            # NEW: head's existing tg_file_ids
+            return _result_scalars_all(["A"])
+        if n == 4:
+            # tail media: (id, tg_file_id) — one is duplicate, one is new.
+            return _result_with_all([(2001, "A"), (2002, "B")])
+        # follow-up calls: classify by SQL text
+        stmt = args[0]
+        s = str(stmt)
+        if "UPDATE media" in s:
+            seen["updates"] += 1
+        elif "DELETE FROM media" in s:
+            seen["deletes_media"] += 1
+        return MagicMock()
+
+    session.execute = AsyncMock(side_effect=execute_side_effect)
+    sf = _session_factory(session)
+
+    n = asyncio.run(mod.merge_existing_albums(fake_client, sf))
+
+    assert n == 1  # one tail post merged-away
+    # Duplicate row (id=2001, tg_file_id="A") must be DELETEd; the new row
+    # (id=2002, tg_file_id="B") must be UPDATEd onto the head.
+    assert seen["deletes_media"] == 1
+    assert seen["updates"] == 1
 
 
 def test_merge_continues_when_get_entity_fails():
