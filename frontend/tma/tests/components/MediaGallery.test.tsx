@@ -109,6 +109,39 @@ describe('MediaGallery — video tile', () => {
   });
 });
 
+describe('MediaGallery — document tile', () => {
+  function documentMedia(overrides: Partial<FeedMedia> = {}): FeedMedia {
+    return {
+      id: 1,
+      type: 'document',
+      width: null,
+      height: null,
+      duration: null,
+      has_video_file: false,
+      ...overrides,
+    };
+  }
+
+  it('document tile is a t.me link with "Файл" label', () => {
+    const { container } = render(
+      <MediaGallery media={[documentMedia()]} channel={channel} tgMessageId={42} />,
+    );
+    const a = container.querySelector('a[href^="https://t.me/"]');
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute('href')).toBe('https://t.me/meduza/42');
+    expect(screen.getByText(/Файл/)).toBeInTheDocument();
+  });
+
+  it('document tile in a private channel links via t.me/c/<tg_chat_id>/<msg>', () => {
+    const privateChannel: FeedChannel = { ...channel, username: null, is_private: true };
+    const { container } = render(
+      <MediaGallery media={[documentMedia()]} channel={privateChannel} tgMessageId={42} />,
+    );
+    const a = container.querySelector('a[href^="https://t.me/c/"]');
+    expect(a?.getAttribute('href')).toBe('https://t.me/c/1319248631/42');
+  });
+});
+
 describe('MediaGallery interaction (lightbox)', () => {
   beforeEach(() => {
     localStorage.setItem(

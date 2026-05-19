@@ -89,9 +89,26 @@ function VideoRow({ m, channel, tgMessageId }: VideoRowProps) {
   );
 }
 
-function DocumentRow() {
+interface DocumentRowProps {
+  channel: FeedChannel;
+  tgMessageId: number;
+}
+
+function DocumentRow({ channel, tgMessageId }: DocumentRowProps) {
+  const link = tgPostUrl(channel, tgMessageId);
+  const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    openTelegramLink(link);
+  };
   return (
-    <div className="mt-1 bg-secondary p-3 text-sm text-hint">Документ — открыть в Telegram.</div>
+    <a
+      href={link}
+      onClick={onOpen}
+      className="mt-1 flex items-center gap-2 rounded bg-secondary px-3 py-2 text-sm text-link"
+    >
+      <span aria-hidden>📎</span>
+      <span>Файл — открыть в Telegram</span>
+    </a>
   );
 }
 
@@ -126,7 +143,7 @@ export function MediaGallery({ media, channel, tgMessageId }: Props) {
         <VideoRow key={m.id} m={m} channel={channel} tgMessageId={tgMessageId} />
       ))}
       {documents.map((m) => (
-        <DocumentRow key={m.id} />
+        <DocumentRow key={m.id} channel={channel} tgMessageId={tgMessageId} />
       ))}
       {openIndex !== null ? (
         <MediaLightbox
