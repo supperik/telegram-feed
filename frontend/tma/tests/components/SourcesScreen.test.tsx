@@ -33,4 +33,35 @@ describe('SourcesScreen', () => {
     );
     expect(screen.queryByText(/только публичные каналы/i)).not.toBeInTheDocument();
   });
+
+  it('renders the "hidden from feed" section when API returns items', async () => {
+    authenticate();
+    server.use(
+      http.get(`${API_BASE}/sources`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              channel: { id: 1, username: 'a', title: 'A', photo_url: null, is_private: false },
+              added_at: '2026-05-18T00:00:00Z',
+              subscription_status: 'active',
+            },
+          ],
+        }),
+      ),
+      http.get(`${API_BASE}/sources/hidden`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              channel: { id: 2, username: 'h', title: 'H', photo_url: null, is_private: false },
+              hidden_at: '2026-05-19T00:00:00Z',
+            },
+          ],
+        }),
+      ),
+    );
+    render(<SourcesScreen />, { wrapper: wrap() });
+    await waitFor(() =>
+      expect(screen.getByText(/скрыты из ленты \(1\)/i)).toBeInTheDocument(),
+    );
+  });
 });

@@ -1,5 +1,6 @@
 import { useSources } from '@/features/sources/useSources';
 import { AddSourceForm } from '@/features/sources/AddSourceForm';
+import { HiddenSourcesSection } from '@/features/sources/HiddenSourcesSection';
 import { SourceListItem } from '@/features/sources/SourceListItem';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -38,6 +39,8 @@ export function SourcesScreen() {
           {data.items.map((i) => <SourceListItem key={i.channel.id} item={i} />)}
         </ul>
       )}
+
+      <HiddenSourcesSection />
     </div>
   );
 }
