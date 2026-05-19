@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Literal
 
 from api.errors import APIError
 
@@ -31,3 +32,76 @@ class FeedCursor:
         # Far future + post_id=0 so the keyset predicate `(posted_at, id) < cursor`
         # returns the latest post first.
         return cls(posted_at=datetime(9999, 12, 31, tzinfo=timezone.utc), post_id=0)
+
+
+@dataclass(frozen=True)
+class CatalogCursor:
+    """Keyset cursor for /channels/catalog.
+
+    Two shapes share one class so the encoded string self-identifies the
+    view (and the API can't pass an `available` cursor into a `hidden`
+    request).
+    """
+    view: Literal["available", "hidden"]
+    posts_count: int          # used when view == "available"
+    hidden_at: datetime       # used when view == "hidden"
+    channel_id: int
+
+    @classmethod
+    def available(cls, *, posts_count: int, channel_id: int) -> "CatalogCursor":
+        return cls(
+            view="available",
+            posts_count=posts_count,
+            hidden_at=datetime(1970, 1, 1, tzinfo=timezone.utc),
+            channel_id=channel_id,
+        )
+
+    @classmethod
+    def hidden(cls, *, hidden_at: datetime, channel_id: int) -> "CatalogCursor":
+        return cls(
+            view="hidden",
+            posts_count=0,
+            hidden_at=hidden_at,
+            channel_id=channel_id,
+        )
+
+    @classmethod
+    def initial_available(cls) -> "CatalogCursor":
+        # posts_count > any real value; channel_id=0 so the keyset
+        # predicate (posts_count, channel_id) < cursor matches every row.
+        return cls.available(posts_count=2_000_000_000, channel_id=0)
+
+    @classmethod
+    def initial_hidden(cls) -> "CatalogCursor":
+        return cls.hidden(
+            hidden_at=datetime(9999, 12, 31, tzinfo=timezone.utc),
+            channel_id=0,
+        )
+
+    def encode(self) -> str:
+        if self.view == "available":
+            raw = f"a|{self.posts_count}|{self.channel_id}".encode()
+        else:
+            raw = f"h|{self.hidden_at.isoformat()}|{self.channel_id}".encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    @classmethod
+    def decode(cls, s: str) -> "CatalogCursor":
+        try:
+            padded = s + "=" * (-len(s) % 4)
+            raw = base64.urlsafe_b64decode(padded.encode()).decode()
+            tag, rest = raw.split("|", 1)
+            if tag == "a":
+                pc, cid = rest.split("|", 1)
+                return cls.available(posts_count=int(pc), channel_id=int(cid))
+            if tag == "h":
+                hat, cid = rest.split("|", 1)
+                return cls.hidden(
+                    hidden_at=datetime.fromisoformat(hat),
+                    channel_id=int(cid),
+                )
+            raise ValueError("unknown cursor tag")
+        except Exception as e:  # noqa: BLE001
+            raise APIError(
+                code="bad_cursor", message="Cursor is malformed", status_code=400
+            ) from e
