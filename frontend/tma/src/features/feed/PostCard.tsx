@@ -20,15 +20,13 @@ function formatCount(n: number): string {
 }
 
 export function PostCard({ post }: Props) {
-  const link = tgPostUrl(post.channel, post.tg_message_id);
-  const inviteUrl = post.channel.invite_url;
+  // For private channels with an invite link, the Telegram button leads to
+  // the invite (a non-member can join; an already-member is taken to the
+  // channel). For everything else it deep-links to the post itself.
+  const link = post.channel.invite_url ?? tgPostUrl(post.channel, post.tg_message_id);
   const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     openTelegramLink(link);
-  };
-  const onJoin = (e: MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    if (inviteUrl) openTelegramLink(inviteUrl);
   };
   return (
     <article className="mx-3 mb-3 overflow-hidden rounded-2xl bg-secondary shadow-card">
@@ -50,21 +48,11 @@ export function PostCard({ post }: Props) {
         ) : null}
         <SaveButton postId={post.id} isSaved={post.is_saved} />
         <HideButton postId={post.id} />
-        {inviteUrl ? (
-          <a
-            href={inviteUrl}
-            onClick={onJoin}
-            aria-label="Присоединиться к каналу"
-            className="ml-auto inline-flex h-9 items-center justify-center rounded-full px-3 text-[13px] font-medium text-link active:bg-link-soft"
-          >
-            Присоединиться
-          </a>
-        ) : null}
         <a
           href={link}
           onClick={onOpen}
           aria-label="Open in Telegram"
-          className={`${inviteUrl ? '' : 'ml-auto '}inline-flex h-9 w-9 items-center justify-center rounded-full text-link active:bg-link-soft`}
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-link active:bg-link-soft"
         >
           <SendIcon size={18} />
         </a>
