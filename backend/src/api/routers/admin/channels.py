@@ -8,6 +8,9 @@ from api.channel_photo import channel_photo_url
 from api.deps import get_current_admin, get_db
 from shared.models import Admin
 from shared.repositories.admins import (
+    DEFAULT_ORDER,
+    DEFAULT_SORT,
+    SORTABLE_FIELDS,
     ban_channel,
     get_channel_or_none,
     get_channel_row_for_admin,
@@ -60,10 +63,24 @@ async def list_channels(
     cursor: str | None = Query(default=None),
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: str = Query(default=DEFAULT_SORT),
+    order: str = Query(default=DEFAULT_ORDER),
     _: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ChannelsListResponse:
-    rows, next_cursor = await list_channels_for_admin(db, q=q, cursor=cursor, limit=limit)
+    if sort not in SORTABLE_FIELDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "invalid_sort", "field": sort}},
+        )
+    if order not in ("asc", "desc"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "invalid_order", "value": order}},
+        )
+    rows, next_cursor = await list_channels_for_admin(
+        db, q=q, cursor=cursor, limit=limit, sort=sort, order=order,
+    )
     return ChannelsListResponse(
         channels=[_channel_out_from_row(r) for r in rows],
         next_cursor=next_cursor,

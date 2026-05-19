@@ -85,6 +85,58 @@ describe("ChannelsScreen", () => {
     ).toBeInTheDocument();
   });
 
+  it("clicking a sortable header reissues the query with new sort/order", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({
+        data: { channels: SAMPLE_CHANNELS, next_cursor: null },
+      })
+      .mockResolvedValueOnce({
+        data: { channels: SAMPLE_CHANNELS, next_cursor: null },
+      })
+      .mockResolvedValueOnce({
+        data: { channels: SAMPLE_CHANNELS, next_cursor: null },
+      });
+
+    renderWithClient(<ChannelsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText("Alpha")).toBeInTheDocument();
+    });
+
+    // First call uses the default sort (last_post_at desc).
+    expect(apiClient.get).toHaveBeenNthCalledWith(
+      1,
+      "/admin/channels",
+      expect.objectContaining({
+        params: expect.objectContaining({ sort: "last_post_at", order: "desc" }),
+      }),
+    );
+
+    // Click "Posts" header → switches to posts_count desc.
+    await user.click(screen.getByRole("button", { name: /^Posts/ }));
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenNthCalledWith(
+        2,
+        "/admin/channels",
+        expect.objectContaining({
+          params: expect.objectContaining({ sort: "posts_count", order: "desc" }),
+        }),
+      );
+    });
+
+    // Second click on the same header toggles order to asc.
+    await user.click(screen.getByRole("button", { name: /^Posts/ }));
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenNthCalledWith(
+        3,
+        "/admin/channels",
+        expect.objectContaining({
+          params: expect.objectContaining({ sort: "posts_count", order: "asc" }),
+        }),
+      );
+    });
+  });
+
   it("opens BanDialog when Ban is clicked and submits ban request", async () => {
     const user = userEvent.setup();
     vi.mocked(apiClient.get).mockResolvedValueOnce({

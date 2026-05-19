@@ -8,16 +8,69 @@ import { Input } from "../../shared/ui/Input";
 import { Table, Th, Td } from "../../shared/ui/Table";
 import { BanDialog } from "./BanDialog";
 
+type SortField =
+  | "id"
+  | "username"
+  | "posts_count"
+  | "ref_count"
+  | "last_post_at"
+  | "banned";
+type SortOrder = "asc" | "desc";
+
+function SortableTh({
+  field,
+  currentSort,
+  currentOrder,
+  onChange,
+  children,
+}: {
+  field: SortField;
+  currentSort: SortField;
+  currentOrder: SortOrder;
+  onChange: (next: { sort: SortField; order: SortOrder }) => void;
+  children: React.ReactNode;
+}) {
+  const active = currentSort === field;
+  const indicator = active ? (currentOrder === "asc" ? "↑" : "↓") : "";
+  return (
+    <Th>
+      <button
+        type="button"
+        className={
+          "inline-flex items-center gap-1 select-none hover:text-gray-900 " +
+          (active ? "text-gray-900 font-semibold" : "text-gray-700")
+        }
+        onClick={() =>
+          onChange({
+            sort: field,
+            order: active && currentOrder === "desc" ? "asc" : "desc",
+          })
+        }
+        aria-sort={active ? (currentOrder === "asc" ? "ascending" : "descending") : "none"}
+      >
+        {children}
+        <span className="text-xs w-3 inline-block text-left">{indicator}</span>
+      </button>
+    </Th>
+  );
+}
+
 export function ChannelsScreen() {
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState<SortField>("last_post_at");
+  const [order, setOrder] = useState<SortOrder>("desc");
   const [banning, setBanning] = useState<Channel | null>(null);
   const qc = useQueryClient();
 
   const query = useInfiniteQuery({
-    queryKey: ["admin", "channels", q],
+    queryKey: ["admin", "channels", q, sort, order],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
-      const params: Record<string, string> = { limit: "50" };
+      const params: Record<string, string> = {
+        limit: "50",
+        sort,
+        order,
+      };
       if (q) params.q = q;
       if (pageParam) params.cursor = pageParam;
       const { data } = await apiClient.get<ChannelsListResponse>(
@@ -53,6 +106,17 @@ export function ChannelsScreen() {
 
   const rows = query.data?.pages.flatMap((p) => p.channels) ?? [];
 
+  const onSortChange = ({
+    sort: nextSort,
+    order: nextOrder,
+  }: {
+    sort: SortField;
+    order: SortOrder;
+  }) => {
+    setSort(nextSort);
+    setOrder(nextOrder);
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -69,13 +133,25 @@ export function ChannelsScreen() {
         <Table>
           <thead>
             <tr>
-              <Th>ID</Th>
-              <Th>Username</Th>
+              <SortableTh field="id" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                ID
+              </SortableTh>
+              <SortableTh field="username" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                Username
+              </SortableTh>
               <Th>Title</Th>
-              <Th>Posts</Th>
-              <Th>Subscribers</Th>
-              <Th>Last post</Th>
-              <Th>Banned</Th>
+              <SortableTh field="posts_count" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                Posts
+              </SortableTh>
+              <SortableTh field="ref_count" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                Subscribers
+              </SortableTh>
+              <SortableTh field="last_post_at" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                Last post
+              </SortableTh>
+              <SortableTh field="banned" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                Banned
+              </SortableTh>
               <Th>Action</Th>
             </tr>
           </thead>
