@@ -164,3 +164,44 @@ async def download_and_store_video(
         content_type="video/mp4",
     )
     return key
+
+
+async def _maybe_download_full_video(
+    client: TelegramClient,
+    minio_client: Minio,
+    msg: Any,
+    *,
+    channel_id: int,
+    bucket: str,
+    settings: Any,
+) -> str | None:
+    """Download the full video iff size and duration are within the
+    configured caps. Returns the storage_key, or None if skipped/failed.
+
+    Cap logic is intentionally additive — failure here MUST NOT undo the
+    thumb-download that caller has already performed.
+    """
+    video = getattr(msg, "video", None)
+    if video is None:
+        return None
+    size = getattr(video, "size", None) or 0
+    duration = getattr(video, "duration", None)
+    if size > settings.video_max_download_bytes:
+        return None
+    if duration is not None and duration > settings.video_max_download_seconds:
+        return None
+    try:
+        return await download_and_store_video(
+            client, minio_client, msg,
+            channel_id=channel_id, bucket=bucket,
+        )
+    except Exception as e:  # noqa: BLE001 — cap-helper must never raise
+        try:
+            log.warning(
+                "photos.full_video_download_failed",
+                channel_id=channel_id, msg_id=getattr(msg, "id", None),
+                error=str(e),
+            )
+        except ValueError:
+            pass
+        return None
