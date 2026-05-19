@@ -135,3 +135,131 @@ async def test_media_returns_401_without_any_token(
 
     r = await async_client.get(f"/media/{media.id}")
     assert r.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_media_video_returns_mp4_when_video_storage_key_set(
+    async_client, db_session, seed_user, monkeypatch
+) -> None:
+    """GET /media/{id}/video streams the MinIO object at video_storage_key
+    with Content-Type: video/mp4."""
+    uid = await seed_user(tg_user_id=9001)
+    ch = Channel(tg_chat_id=120010, username="v1", title="V1")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=10, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    media = Media(
+        post_id=p.id,
+        type="video",
+        storage_key="video_thumbs/10/10.jpg",
+        video_storage_key="videos/10/10.mp4",
+        position=0,
+    )
+    db_session.add(media)
+    await db_session.commit()
+
+    payload = b"\x00\x00\x00\x18ftypmp42fakevideobytes"
+    fake = _fake_minio_client(payload)
+    monkeypatch.setattr("api.routers.media.make_storage_client", lambda: fake)
+
+    r = await async_client.get(f"/media/{media.id}/video", headers=_auth(uid))
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "video/mp4"
+    assert r.content == payload
+    assert "max-age" in r.headers.get("cache-control", "").lower()
+    fake.get_object.assert_called_once_with("media", "videos/10/10.mp4")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_media_video_404_when_no_video_storage_key(
+    async_client, db_session, seed_user, monkeypatch
+) -> None:
+    """Video media with video_storage_key=None (e.g. capped by size) → 404."""
+    uid = await seed_user(tg_user_id=9002)
+    ch = Channel(tg_chat_id=120011, username="v2", title="V2")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=11, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    media = Media(
+        post_id=p.id,
+        type="video",
+        storage_key="video_thumbs/11/11.jpg",
+        video_storage_key=None,
+        position=0,
+    )
+    db_session.add(media)
+    await db_session.commit()
+
+    fake = _fake_minio_client(b"")
+    monkeypatch.setattr("api.routers.media.make_storage_client", lambda: fake)
+
+    r = await async_client.get(f"/media/{media.id}/video", headers=_auth(uid))
+    assert r.status_code == 404
+    fake.get_object.assert_not_called()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_media_video_404_for_photo_media(
+    async_client, db_session, seed_user, monkeypatch
+) -> None:
+    """A photo row (even with a storage_key) is not a video → 404 from the
+    /video endpoint even if the caller is authenticated."""
+    uid = await seed_user(tg_user_id=9003)
+    ch = Channel(tg_chat_id=120012, username="v3", title="V3")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=12, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    # Photo media: type=photo, no video_storage_key. Even if someone set
+    # video_storage_key on a photo row by mistake, type guard wins.
+    media = Media(
+        post_id=p.id,
+        type="photo",
+        storage_key="photos/12/12.jpg",
+        video_storage_key="videos/12/12.mp4",
+        position=0,
+    )
+    db_session.add(media)
+    await db_session.commit()
+
+    fake = _fake_minio_client(b"")
+    monkeypatch.setattr("api.routers.media.make_storage_client", lambda: fake)
+
+    r = await async_client.get(f"/media/{media.id}/video", headers=_auth(uid))
+    assert r.status_code == 404
+    fake.get_object.assert_not_called()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_media_video_401_without_token(
+    async_client, db_session, seed_user
+) -> None:
+    """No auth → 401 (same dependency as /media/{id})."""
+    uid = await seed_user(tg_user_id=9004)
+    ch = Channel(tg_chat_id=120013, username="v4", title="V4")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=13, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    media = Media(
+        post_id=p.id,
+        type="video",
+        storage_key="video_thumbs/13/13.jpg",
+        video_storage_key="videos/13/13.mp4",
+        position=0,
+    )
+    db_session.add(media)
+    await db_session.commit()
+
+    r = await async_client.get(f"/media/{media.id}/video")
+    assert r.status_code == 401

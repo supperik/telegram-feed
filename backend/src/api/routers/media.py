@@ -66,3 +66,28 @@ async def get_media(
             response.release_conn()
 
     return StreamingResponse(_iter(), media_type="image/jpeg", headers=_CACHE_HEADERS)
+
+
+@router.get("/{media_id}/video")
+async def get_media_video(
+    media_id: int,
+    settings: Settings = Depends(get_settings),
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(_get_user_for_media),
+) -> StreamingResponse:
+    media = await db.get(Media, media_id)
+    if media is None or media.type != "video" or not media.video_storage_key:
+        raise APIError(code="media_not_found", message="Video not found", status_code=404)
+
+    client = make_storage_client()
+    response = client.get_object(settings.minio_bucket, media.video_storage_key)
+
+    def _iter() -> Iterator[bytes]:
+        try:
+            for chunk in response.stream(64 * 1024):
+                yield chunk
+        finally:
+            response.close()
+            response.release_conn()
+
+    return StreamingResponse(_iter(), media_type="video/mp4", headers=_CACHE_HEADERS)

@@ -24,6 +24,7 @@ class FeedMediaRow:
     width: int | None
     height: int | None
     duration: int | None
+    video_storage_key: str | None = None
 
 
 @dataclass
@@ -40,6 +41,7 @@ class FeedPostRow:
     channel_username: str | None
     channel_title: str
     channel_photo_storage_key: str | None
+    channel_invite_hash: str | None
     is_saved: bool
     media: list[FeedMediaRow] = field(default_factory=list)
 
@@ -79,6 +81,7 @@ async def fetch_feed_page(
             Channel.username,
             Channel.title,
             Channel.photo_storage_key,
+            Channel.invite_hash,
             saved_q.label("is_saved"),
         )
         .join(Channel, Channel.id == Post.channel_id)
@@ -110,6 +113,7 @@ async def fetch_feed_page(
             channel_username=r.username,
             channel_title=r.title,
             channel_photo_storage_key=r.photo_storage_key,
+            channel_invite_hash=r.invite_hash,
             is_saved=bool(r.is_saved),
         )
         for r in res.all()
@@ -126,6 +130,7 @@ async def fetch_feed_page(
                 Media.height,
                 Media.duration,
                 Media.position,
+                Media.video_storage_key,
             )
             .where(Media.post_id.in_([r.post_id for r in rows]))
             .order_by(Media.post_id, Media.position)
@@ -135,7 +140,12 @@ async def fetch_feed_page(
     for m in media_rows:
         by_post.setdefault(m.post_id, []).append(
             FeedMediaRow(
-                id=m.id, type=m.type, width=m.width, height=m.height, duration=m.duration
+                id=m.id,
+                type=m.type,
+                width=m.width,
+                height=m.height,
+                duration=m.duration,
+                video_storage_key=m.video_storage_key,
             )
         )
     for r in rows:

@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     minio_bucket: str = "media"
     minio_secure: bool = False
 
+    # Media ingest caps — short videos are downloaded fully; larger ones
+    # keep just the thumb (see specs/2026-05-19-private-channel-ux-...md).
+    video_max_download_bytes: int = 20 * 1024 * 1024
+    video_max_download_seconds: int = 60
+
     # Telegram
     tg_api_id: int = 0
     tg_api_hash: str = ""

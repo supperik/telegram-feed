@@ -10,6 +10,7 @@ class FeedMedia(BaseModel):
     width: int | None
     height: int | None
     duration: int | None
+    has_video_file: bool = False
 
 
 class FeedChannel(BaseModel):
@@ -18,6 +19,7 @@ class FeedChannel(BaseModel):
     username: str | None
     title: str
     photo_url: str | None
+    invite_url: str | None = None
 
 
 class FeedPost(BaseModel):

@@ -183,3 +183,70 @@ def test_download_video_thumb_returns_none_when_no_thumbs():
     assert key is None
     fake_client.download_media.assert_not_called()
     fake_minio.put_object.assert_not_called()
+
+
+def test_download_and_store_video_uploads_with_mp4_content_type():
+    from ingester.photos import download_and_store_video
+
+    msg = MagicMock()
+    msg.id = 42
+    msg.video = MagicMock()
+    msg.video.id = 7
+    fake_client = MagicMock()
+    fake_client.download_media = AsyncMock(
+        return_value=b"\x00\x00\x00 ftypiso5fake-mp4-bytes"
+    )
+    fake_minio = MagicMock()
+
+    async def run():
+        return await download_and_store_video(
+            fake_client, fake_minio, msg, channel_id=11, bucket="media"
+        )
+
+    key = asyncio.run(run())
+
+    assert key == "videos/11/42_7.mp4"
+    args, kwargs = fake_minio.put_object.call_args
+    assert args[0] == "media"
+    assert args[1] == "videos/11/42_7.mp4"
+    assert kwargs["content_type"] == "video/mp4"
+    assert kwargs["length"] == len(b"\x00\x00\x00 ftypiso5fake-mp4-bytes")
+    assert isinstance(args[2], BytesIO)
+
+
+def test_download_and_store_video_returns_none_on_empty_bytes():
+    from ingester.photos import download_and_store_video
+
+    msg = MagicMock()
+    msg.id = 1
+    msg.video = MagicMock()
+    msg.video.id = 2
+    fake_client = MagicMock()
+    fake_client.download_media = AsyncMock(return_value=b"")
+    fake_minio = MagicMock()
+
+    async def run():
+        return await download_and_store_video(
+            fake_client, fake_minio, msg, channel_id=3, bucket="media"
+        )
+
+    key = asyncio.run(run())
+
+    assert key is None
+    fake_minio.put_object.assert_not_called()
+
+
+def test_download_and_store_video_returns_none_when_msg_has_no_video():
+    from ingester.photos import download_and_store_video
+
+    msg = MagicMock()
+    msg.video = None
+
+    async def run():
+        return await download_and_store_video(
+            MagicMock(), MagicMock(), msg, channel_id=3, bucket="media"
+        )
+
+    key = asyncio.run(run())
+
+    assert key is None

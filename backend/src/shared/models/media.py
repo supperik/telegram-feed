@@ -19,3 +19,4 @@ class Media(Base):
     duration: Mapped[int | None] = mapped_column(Integer)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     position: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
+    video_storage_key: Mapped[str | None] = mapped_column(String(1024))

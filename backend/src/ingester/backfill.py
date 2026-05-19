@@ -34,6 +34,7 @@ async def backfill_recent_media(
     minio_client: Minio,
     *,
     bucket: str,
+    settings: Any,
     limit: int = 50,
 ) -> int:
     """Walk the last `limit` messages of every active channel that has at
@@ -92,6 +93,7 @@ async def backfill_recent_media(
                 client=client,
                 minio_client=minio_client,
                 bucket=bucket,
+                settings=settings,
             )
 
         total += channel_count
@@ -116,6 +118,7 @@ async def _backfill_one_message(
     client: TelegramClient,
     minio_client: Minio,
     bucket: str,
+    settings: Any,
 ) -> int:
     """Match a Telegram message to a Post in our DB, find Media rows with
     storage_key=NULL, and run download_and_set_storage_keys for them.
@@ -154,6 +157,7 @@ async def _backfill_one_message(
             client=client,
             minio_client=minio_client,
             bucket=bucket,
+            settings=settings,
         )
         await session.commit()
         return len(media_rows)
