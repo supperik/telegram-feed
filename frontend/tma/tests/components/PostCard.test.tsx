@@ -27,6 +27,7 @@ const post: FeedPost = {
     title: 'Meduza',
     photo_url: null,
     is_private: false,
+    invite_url: null,
   },
   media: [],
   is_saved: false,

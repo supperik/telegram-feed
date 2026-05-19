@@ -10,11 +10,12 @@ const channel: FeedChannel = {
   title: 'M',
   photo_url: null,
   is_private: false,
+  invite_url: null,
 };
 
 function makePhotos(n: number): FeedMedia[] {
   return Array.from({ length: n }, (_, i) => ({
-    id: i + 1, type: 'photo' as const, width: 1280, height: 720, duration: null,
+    id: i + 1, type: 'photo' as const, width: 1280, height: 720, duration: null, has_video_file: false,
   }));
 }
 
@@ -49,7 +50,7 @@ describe('MediaGallery', () => {
   });
 
   it('video tile shows the ▶ play badge', () => {
-    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
+    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30, has_video_file: false }];
     render(<MediaGallery media={media} channel={channel} tgMessageId={42} />);
     expect(screen.getByText(/▶/)).toBeInTheDocument();
   });
@@ -58,7 +59,7 @@ describe('MediaGallery', () => {
     // Bytes for video aren't stored on the backend, so we don't try to
     // play it inside the lightbox — tapping a video tile goes straight
     // to Telegram instead. Lightbox is photos-only.
-    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
+    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30, has_video_file: false }];
     const { container } = render(<MediaGallery media={media} channel={channel} tgMessageId={42} />);
     const a = container.querySelector('a[href^="https://t.me/"]');
     expect(a).not.toBeNull();
@@ -67,7 +68,7 @@ describe('MediaGallery', () => {
 
   it('video tile in a private channel links via t.me/c/<tg_chat_id>/<msg>', () => {
     const privateChannel: FeedChannel = { ...channel, username: null, is_private: true };
-    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
+    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30, has_video_file: false }];
     const { container } = render(
       <MediaGallery media={media} channel={privateChannel} tgMessageId={42} />,
     );
@@ -114,8 +115,8 @@ describe('MediaGallery interaction (lightbox)', () => {
     // photo-only slide list, not within the full media[]. A leading video
     // shouldn't shift the photo to a non-existent slot.
     const media: FeedMedia[] = [
-      { id: 10, type: 'video', width: 800, height: 600, duration: 30 },
-      { id: 11, type: 'photo', width: 800, height: 600, duration: null },
+      { id: 10, type: 'video', width: 800, height: 600, duration: 30, has_video_file: false },
+      { id: 11, type: 'photo', width: 800, height: 600, duration: null, has_video_file: false },
     ];
     render(<MediaGallery media={media} channel={channel} tgMessageId={1} />);
     // Photo tile is the second tappable element (first is the <a> for video).
