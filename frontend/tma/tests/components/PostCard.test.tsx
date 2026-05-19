@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PostCard } from '@/features/feed/PostCard';
 import type { FeedPost } from '@/shared/api/types';
+import * as telegram from '@/shared/lib/telegram';
 
 function wrap() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -110,5 +111,31 @@ describe('PostCard', () => {
     const saved = { ...post, is_saved: true };
     render(<PostCard post={saved} />, { wrapper: wrap() });
     expect(screen.getByRole('button', { name: /unsave/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('PostCard — Join button', () => {
+  it('hides Join button when invite_url is null', () => {
+    render(<PostCard post={post} />, { wrapper: wrap() });
+    expect(screen.queryByRole('link', { name: /Присоединиться/i })).toBeNull();
+  });
+
+  it('shows Join button when invite_url is set, opens via openTelegramLink', () => {
+    const spy = vi.spyOn(telegram, 'openTelegramLink').mockImplementation(() => {});
+    const inviteUrl = 'https://t.me/+abc123';
+    const privatePost: FeedPost = {
+      ...post,
+      channel: {
+        ...post.channel,
+        username: null,
+        is_private: true,
+        invite_url: inviteUrl,
+      },
+    };
+    render(<PostCard post={privatePost} />, { wrapper: wrap() });
+    const joinLink = screen.getByRole('link', { name: /Присоединиться/i });
+    const notCanceled = fireEvent.click(joinLink);
+    expect(spy).toHaveBeenCalledWith(inviteUrl);
+    expect(notCanceled).toBe(false);
   });
 });
