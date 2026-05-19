@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/shared/api/client';
+import { HIDDEN_SOURCES_QUERY_KEY } from '@/features/sources/useHiddenSources';
 import type { SourceList } from '@/shared/api/types';
 
 export const SOURCES_QUERY_KEY = ['sources'] as const;
@@ -27,6 +28,9 @@ export function useRemoveSource() {
     onError: (_err, _channelId, ctx) => {
       if (ctx?.prev) qc.setQueryData(SOURCES_QUERY_KEY, ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: SOURCES_QUERY_KEY }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: SOURCES_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: HIDDEN_SOURCES_QUERY_KEY });
+    },
   });
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { apiFetch } from '@/shared/api/client';
 import { FEED_QUERY_KEY } from '@/features/feed/useFeed';
+import { HIDDEN_SOURCES_QUERY_KEY } from '@/features/sources/useHiddenSources';
 import { SOURCES_QUERY_KEY } from '@/features/sources/useSources';
 import type { FeedPage } from '@/shared/api/types';
 
@@ -84,6 +85,9 @@ export function useHideSource() {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.feedSnap) rollbackFeed(qc, ctx.feedSnap);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: HIDDEN_SOURCES_QUERY_KEY });
     },
   });
 }
