@@ -77,7 +77,7 @@ describe('SourcesScreen', () => {
     expect(screen.queryByText(/только публичные каналы/i)).not.toBeInTheDocument();
   });
 
-  it('renders ChannelCatalogSection above subscriptions list', async () => {
+  it('renders ChannelCatalogSection below "Мои источники"', async () => {
     authenticate();
     server.use(
       http.get(`${API_BASE}/sources`, () => HttpResponse.json({ items: [] })),
@@ -99,7 +99,12 @@ describe('SourcesScreen', () => {
     );
     render(<SourcesScreen />, { wrapper: wrap() });
     await waitFor(() => expect(screen.getByText('Show')).toBeInTheDocument());
-    expect(screen.getByText(/доступные каналы/i)).toBeInTheDocument();
+    const myHeader = screen.getByText(/мои источники/i);
+    const catalogHeader = screen.getByText(/доступные каналы/i);
+    expect(
+      myHeader.compareDocumentPosition(catalogHeader)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('renders the "hidden from feed" section when API returns items', async () => {

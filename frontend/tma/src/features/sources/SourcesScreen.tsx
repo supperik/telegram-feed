@@ -33,8 +33,6 @@ export function SourcesScreen() {
 
       <AddSourceForm />
 
-      <ChannelCatalogSection />
-
       <section className="mx-3 mt-4">
         <h2 className="mb-2 text-base font-semibold">Мои источники</h2>
         {totalCount === 0 ? (
@@ -51,6 +49,8 @@ export function SourcesScreen() {
       </section>
 
       <HiddenSourcesSection />
+
+      <ChannelCatalogSection />
     </div>
   );
 }
