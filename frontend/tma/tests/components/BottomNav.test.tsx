@@ -9,7 +9,8 @@ function renderAtPath(path: string) {
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <div>feed</div> });
   const savedRoute = createRoute({ getParentRoute: () => rootRoute, path: '/saved', component: () => <div>saved</div> });
   const sourcesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sources', component: () => <div>sources</div> });
-  const routeTree = rootRoute.addChildren([indexRoute, savedRoute, sourcesRoute]);
+  const hiddenRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sources/hidden', component: () => <div>hidden</div> });
+  const routeTree = rootRoute.addChildren([indexRoute, savedRoute, sourcesRoute, hiddenRoute]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
   return render(<RouterProvider router={router} />);
 }
@@ -31,6 +32,17 @@ describe('BottomNav', () => {
   it('marks Sources active when at /sources', async () => {
     renderAtPath('/sources');
     expect(await screen.findByRole('link', { name: /источники/i })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('marks Sources active on /sources sub-pages (e.g. /sources/hidden)', async () => {
+    renderAtPath('/sources/hidden');
+    expect(await screen.findByRole('link', { name: /источники/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /лента/i })).not.toHaveAttribute('aria-current');
+  });
+
+  it('does NOT mark Лента active on non-root paths', async () => {
+    renderAtPath('/sources');
+    expect(await screen.findByRole('link', { name: /лента/i })).not.toHaveAttribute('aria-current');
   });
 
   it('navigates on click', async () => {
