@@ -1,4 +1,3 @@
-import importlib.metadata
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from api import __version__
 from api.errors import install_error_handler
 from shared.config import get_settings
 from shared.logging import configure_logging
@@ -75,14 +75,9 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
 
-    try:
-        version = importlib.metadata.version("telegram-feed-backend")
-    except importlib.metadata.PackageNotFoundError:
-        version = "0.0.0"
-
     @app.get("/internal/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": version}
+        return {"status": "ok", "version": __version__}
 
     return app
 

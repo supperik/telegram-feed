@@ -1,4 +1,20 @@
+import tomllib
+from pathlib import Path
+
 from fastapi.testclient import TestClient
+
+
+def test_api_version_matches_pyproject():
+    """api/__init__.py.__version__ is the runtime source of truth (Dockerfile
+    installs deps with --no-root, so importlib.metadata fails). It must stay
+    in sync with pyproject.toml — if they drift, the health endpoint silently
+    lies about which release is running. See 5wm.
+    """
+    from api import __version__
+
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    assert data["tool"]["poetry"]["version"] == __version__
 
 
 def test_health_returns_ok(monkeypatch):
@@ -21,3 +37,8 @@ def test_health_returns_ok(monkeypatch):
         body = r.json()
         assert body["status"] == "ok"
         assert "version" in body
+        # 0.0.0 is the importlib.metadata.PackageNotFoundError fallback —
+        # it fires when Dockerfile installs deps with --no-root and the
+        # project package itself isn't installed. health must expose the
+        # real version regardless of how deps were laid down. See 5wm.
+        assert body["version"] != "0.0.0"
