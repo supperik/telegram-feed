@@ -5,6 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+class _S:
+    """Stand-in for shared.config.Settings — only the fields the cap-helper reads."""
+    video_max_download_bytes = 20 * 1024 * 1024
+    video_max_download_seconds = 60
+
+
 @asynccontextmanager
 async def _fake_session_cm(session):
     yield session
@@ -74,8 +80,8 @@ def test_join_worker_happy_path(monkeypatch):
     sf = _fake_session_factory(session)
 
     async def driver():
-        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
-        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media")
+        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S())
+        await jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S())
 
     asyncio.run(driver())
 
@@ -111,7 +117,7 @@ def test_join_worker_handles_username_not_occupied(monkeypatch):
     monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
 
     sf = _fake_session_factory(session)
-    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media"))
+    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S()))
 
     fake_mark_failed.assert_awaited_once()
     args, kwargs = fake_mark_failed.call_args
@@ -170,6 +176,7 @@ def test_join_worker_registers_new_channel_in_chat_map(monkeypatch):
 
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
         chat_map=chat_map,
     ))
 
@@ -204,6 +211,7 @@ def test_join_worker_does_not_touch_chat_map_on_failed_join(monkeypatch):
 
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
         chat_map=chat_map,
     ))
 
@@ -240,7 +248,7 @@ def test_join_worker_handles_floodwait(monkeypatch):
     monkeypatch.setattr(jw.asyncio, "sleep", fake_sleep)
 
     sf = _fake_session_factory(session)
-    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media"))
+    asyncio.run(jw._handle_one_pending(fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S()))
 
     fake_sleep.assert_awaited_once_with(4)  # 3 + 1
     fake_mark_failed.assert_not_called()
@@ -290,6 +298,7 @@ def test_join_worker_downloads_and_records_channel_photo(monkeypatch):
     sf = _fake_session_factory(session)
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
     ))
 
     fake_download_channel_photo.assert_awaited_once()
@@ -346,6 +355,7 @@ def test_join_worker_swallows_channel_photo_errors(monkeypatch):
     # Must NOT raise.
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
     ))
 
     # Join completed normally.
@@ -575,6 +585,7 @@ def test_handle_one_pending_private_registers_chat_map(monkeypatch):
 
     asyncio.run(jw._handle_one_pending(
         fake_client, sf, minio_client=MagicMock(), bucket="media",
+        settings=_S(),
         chat_map=chat_map,
     ))
 
@@ -632,7 +643,7 @@ def test_backfill_channel_downloads_media_for_solo_photo(monkeypatch):
 
     asyncio.run(jw._backfill_channel(
         fake_client, sf, minio, entity, channel_id=7,
-        limit=50, bucket="media",
+        limit=50, bucket="media", settings=_S(),
     ))
 
     fake_download.assert_awaited_once()

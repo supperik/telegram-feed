@@ -37,6 +37,7 @@ async def run_approval_poller(
     *,
     minio_client,
     bucket: str,
+    settings,
     poll_interval_s: float = 1800.0,
     timeout_days: int = 7,
 ) -> None:
@@ -51,6 +52,7 @@ async def run_approval_poller(
                 client, session_factory,
                 minio_client=minio_client, bucket=bucket,
                 timeout_days=timeout_days,
+                settings=settings,
             )
         except Exception:
             log.exception("approval_poller.iteration_failed")
@@ -64,6 +66,7 @@ async def _approval_poll_once(
     minio_client,
     bucket: str,
     timeout_days: int,
+    settings,
 ) -> None:
     async with session_factory() as session:
         rows = await fetch_pending_approval(session)
@@ -118,7 +121,7 @@ async def _approval_poll_once(
             try:
                 await _backfill_channel(
                     client, session_factory, minio_client, chat, channel.id,
-                    limit=50, bucket=bucket,
+                    limit=50, bucket=bucket, settings=settings,
                 )
             except Exception:
                 log.exception("approval_poller.backfill_failed", queue_id=row.id)

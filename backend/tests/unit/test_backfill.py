@@ -6,6 +6,12 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 
+class _S:
+    """Stand-in for shared.config.Settings — only the fields the cap-helper reads."""
+    video_max_download_bytes = 20 * 1024 * 1024
+    video_max_download_seconds = 60
+
+
 @asynccontextmanager
 async def _session_cm(session):
     yield session
@@ -46,7 +52,7 @@ def test_backfill_returns_zero_when_no_targets(monkeypatch):
 
     async def run():
         return await backfill.backfill_recent_media(
-            fake_client, sf, MagicMock(), bucket="media", limit=50
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=50
         )
 
     result = asyncio.run(run())
@@ -92,7 +98,7 @@ def test_backfill_downloads_photo_for_existing_post_with_missing_storage_key(mon
 
     async def run():
         return await backfill.backfill_recent_media(
-            fake_client, sf, MagicMock(), bucket="media", limit=50
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=50
         )
 
     result = asyncio.run(run())
@@ -136,7 +142,7 @@ def test_backfill_skips_message_without_matching_post_in_db(monkeypatch):
 
     async def run():
         return await backfill.backfill_recent_media(
-            fake_client, sf, MagicMock(), bucket="media", limit=50
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=50
         )
 
     result = asyncio.run(run())
@@ -174,7 +180,7 @@ def test_backfill_skips_messages_without_media(monkeypatch):
 
     async def run():
         return await backfill.backfill_recent_media(
-            fake_client, sf, MagicMock(), bucket="media", limit=50
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=50
         )
 
     result = asyncio.run(run())
@@ -203,7 +209,7 @@ def test_backfill_continues_when_get_entity_fails(monkeypatch):
 
     async def run():
         return await backfill.backfill_recent_media(
-            fake_client, sf, MagicMock(), bucket="media", limit=50
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=50
         )
 
     result = asyncio.run(run())

@@ -3,6 +3,12 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
+class _S:
+    """Stand-in for shared.config.Settings — only the fields the cap-helper reads."""
+    video_max_download_bytes = 20 * 1024 * 1024
+    video_max_download_seconds = 60
+
+
 @asynccontextmanager
 async def _session_cm(session):
     yield session
@@ -60,6 +66,7 @@ def test_on_new_message_normalizes_inserts_and_downloads_photo(monkeypatch):
             client=fake_client,
             channel_id_map=channel_id_map,
             bucket="media",
+            settings=_S(),
         )
 
     asyncio.run(run())
@@ -107,6 +114,7 @@ def test_on_new_message_skips_duplicate(monkeypatch):
             client=MagicMock(),
             channel_id_map={-100200: 7},
             bucket="media",
+            settings=_S(),
         )
 
     asyncio.run(run())
@@ -139,7 +147,7 @@ def test_subscribe_to_active_channels_loads_map_and_attaches_handler(monkeypatch
 
     async def run():
         m = await live.subscribe_to_active_channels(
-            fake_client, sf, minio_client=MagicMock(), bucket="media"
+            fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S()
         )
         return m
 
@@ -232,7 +240,7 @@ def test_catchup_channels_fetches_missed_messages(monkeypatch):
 
     async def run():
         await live.catchup_channels(
-            fake_client, sf, MagicMock(), bucket="media", limit=100
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=100
         )
 
     asyncio.run(run())
@@ -296,7 +304,7 @@ def test_catchup_channels_downloads_media_for_new_posts(monkeypatch):
 
     async def run():
         await live.catchup_channels(
-            fake_client, sf, MagicMock(), bucket="media", limit=100
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=100
         )
 
     asyncio.run(run())
@@ -349,7 +357,7 @@ def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
 
     async def run():
         await live.catchup_channels(
-            fake_client, sf, MagicMock(), bucket="media", limit=100
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=100
         )
 
     asyncio.run(run())
@@ -385,6 +393,7 @@ def test_on_new_message_skips_grouped_messages(monkeypatch):
             client=MagicMock(),
             channel_id_map={-100200: 7},
             bucket="media",
+            settings=_S(),
         )
 
     asyncio.run(run())
@@ -442,6 +451,7 @@ def test_on_new_album_normalizes_inserts_and_downloads(monkeypatch):
             client=MagicMock(),
             channel_id_map={-100200: 7},
             bucket="media",
+            settings=_S(),
         )
 
     asyncio.run(run())
@@ -470,6 +480,7 @@ def test_on_new_album_unknown_chat_id_is_noop(monkeypatch):
             client=MagicMock(),
             channel_id_map={},
             bucket="media",
+            settings=_S(),
         )
 
     asyncio.run(run())
@@ -527,7 +538,7 @@ def test_catchup_groups_album_messages_into_single_post(monkeypatch):
 
     async def run():
         await live.catchup_channels(
-            fake_client, sf, MagicMock(), bucket="media", limit=200
+            fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=200
         )
 
     asyncio.run(run())
@@ -558,7 +569,7 @@ def test_subscribe_to_active_channels_registers_album_handler_too(monkeypatch):
 
     async def run():
         await live.subscribe_to_active_channels(
-            fake_client, sf, minio_client=MagicMock(), bucket="media"
+            fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S()
         )
 
     asyncio.run(run())

@@ -63,6 +63,7 @@ async def _backfill_channel(
     *,
     limit: int,
     bucket: str,
+    settings,
 ) -> None:
     """Fetch the most recent `limit` messages from `entity`, upsert each, and
     download its media.
@@ -97,6 +98,7 @@ async def _backfill_channel(
                         session, msg=msg, channel_id=channel_id,
                         post_id=new_id, media=media,
                         client=client, minio_client=minio_client, bucket=bucket,
+                        settings=settings,
                     )
             await session.commit()
 
@@ -109,6 +111,7 @@ async def _backfill_channel(
                     session, msg=msg, channel_id=channel_id,
                     new_post_id=new_id, media_values=media_values,
                     client=client, minio_client=minio_client, bucket=bucket,
+                    settings=settings,
                 )
             await session.commit()
 
@@ -297,6 +300,7 @@ async def _handle_one_pending(
     *,
     minio_client: Minio,
     bucket: str,
+    settings,
     chat_map: dict[int, int] | None = None,
 ) -> None:
     """Pop one pending join, attempt it, commit the outcome. No-op if empty.
@@ -332,7 +336,7 @@ async def _handle_one_pending(
             chat_map[_to_marked_chat_id(int(chat.id))] = channel_id
         await _backfill_channel(
             client, session_factory, minio_client, chat, channel_id,
-            limit=50, bucket=bucket,
+            limit=50, bucket=bucket, settings=settings,
         )
         return
 
@@ -438,7 +442,7 @@ async def _handle_one_pending(
     # Backfill happens outside the join session — it owns its own sessions.
     await _backfill_channel(
         client, session_factory, minio_client, entity, channel.id,
-        limit=50, bucket=bucket,
+        limit=50, bucket=bucket, settings=settings,
     )
 
 
@@ -448,6 +452,7 @@ async def run_join_worker(
     *,
     minio_client: Minio,
     bucket: str,
+    settings,
     chat_map: dict[int, int] | None = None,
     poll_interval_s: float = 2.0,
 ) -> None:
@@ -457,6 +462,7 @@ async def run_join_worker(
             await _handle_one_pending(
                 client, session_factory,
                 minio_client=minio_client, bucket=bucket,
+                settings=settings,
                 chat_map=chat_map,
             )
         except Exception as e:  # noqa: BLE001 — keep loop alive

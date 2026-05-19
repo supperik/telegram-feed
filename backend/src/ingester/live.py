@@ -18,7 +18,11 @@ from telethon.tl.types import PeerChannel
 from telethon.utils import get_peer_id
 
 from ingester.normalize import normalize_album, normalize_message
-from ingester.photos import download_and_store_photo, download_and_store_video_thumb
+from ingester.photos import (
+    _maybe_download_full_video,
+    download_and_store_photo,
+    download_and_store_video_thumb,
+)
 from shared.models import Channel, ChannelSubscription, Media, Post
 from shared.repositories.posts import upsert_post
 
@@ -64,6 +68,7 @@ async def on_new_message(
     client: TelegramClient,
     channel_id_map: dict[int, int],
     bucket: str,
+    settings: Any,
 ) -> None:
     """Handle a single NewMessage: normalize, upsert, download media if new."""
     chat_id = event.chat_id
@@ -100,6 +105,7 @@ async def on_new_message(
             client=client,
             minio_client=minio_client,
             bucket=bucket,
+            settings=settings,
         )
         await session.commit()
 
@@ -112,6 +118,7 @@ async def on_new_album(
     client: TelegramClient,
     channel_id_map: dict[int, int],
     bucket: str,
+    settings: Any,
 ) -> None:
     """Handle an events.Album: fold N messages into one Post with N Media,
     then download every media file."""
@@ -137,6 +144,7 @@ async def on_new_album(
         for media, msg in zip(media_values, ordered_msgs):
             mtype = media["type"]
             storage_key: str | None = None
+            video_key: str | None = None
             try:
                 if mtype == "photo":
                     storage_key = await download_and_store_photo(
@@ -147,6 +155,10 @@ async def on_new_album(
                     storage_key = await download_and_store_video_thumb(
                         client, minio_client, msg,
                         channel_id=channel_id, bucket=bucket,
+                    )
+                    video_key = await _maybe_download_full_video(
+                        client, minio_client, msg,
+                        channel_id=channel_id, bucket=bucket, settings=settings,
                     )
             except Exception as e:  # noqa: BLE001
                 try:
@@ -165,6 +177,15 @@ async def on_new_album(
                     )
                     .values(storage_key=storage_key)
                 )
+            if video_key is not None:
+                await session.execute(
+                    update(Media)
+                    .where(
+                        Media.post_id == post_id,
+                        Media.tg_file_id == media["tg_file_id"],
+                    )
+                    .values(video_storage_key=video_key)
+                )
         await session.commit()
 
 
@@ -178,12 +199,14 @@ async def download_and_set_storage_keys(
     client: TelegramClient,
     minio_client: Minio,
     bucket: str,
+    settings: Any,
 ) -> None:
     """Download photo / video-thumb for each new media row and UPDATE
     storage_key. Tolerant of per-media failures."""
     for media in media_values:
         mtype = media["type"]
         storage_key: str | None = None
+        video_key: str | None = None
         try:
             if mtype == "photo":
                 storage_key = await download_and_store_photo(
@@ -194,6 +217,10 @@ async def download_and_set_storage_keys(
                 storage_key = await download_and_store_video_thumb(
                     client, minio_client, msg,
                     channel_id=channel_id, bucket=bucket,
+                )
+                video_key = await _maybe_download_full_video(
+                    client, minio_client, msg,
+                    channel_id=channel_id, bucket=bucket, settings=settings,
                 )
             # documents: no download for MVP.
         except Exception as e:  # noqa: BLE001
@@ -213,6 +240,15 @@ async def download_and_set_storage_keys(
                 )
                 .values(storage_key=storage_key)
             )
+        if video_key is not None:
+            await session.execute(
+                update(Media)
+                .where(
+                    Media.post_id == new_post_id,
+                    Media.tg_file_id == media["tg_file_id"],
+                )
+                .values(video_storage_key=video_key)
+            )
 
 
 async def subscribe_to_active_channels(
@@ -221,6 +257,7 @@ async def subscribe_to_active_channels(
     *,
     minio_client: Minio,
     bucket: str,
+    settings: Any,
 ) -> dict[int, int]:
     """Load active channels from DB and register an UNFILTERED NewMessage
     handler. Returns the {marked_chat_id: channel_id} map.
@@ -243,6 +280,7 @@ async def subscribe_to_active_channels(
         client=client,
         channel_id_map=chat_map,
         bucket=bucket,
+        settings=settings,
     )
     album_handler = partial(
         _dispatch_album,
@@ -251,6 +289,7 @@ async def subscribe_to_active_channels(
         client=client,
         channel_id_map=chat_map,
         bucket=bucket,
+        settings=settings,
     )
     # No chats=... filter on either builder — see docstring above.
     # Both handlers reuse the shared mutable chat_map for filtering.
@@ -263,7 +302,7 @@ async def subscribe_to_active_channels(
     return chat_map
 
 
-async def _dispatch(event, *, session_factory, minio_client, client, channel_id_map, bucket):
+async def _dispatch(event, *, session_factory, minio_client, client, channel_id_map, bucket, settings):
     """Adapter that drops the implicit `event` positional arg into on_new_message kwargs."""
     await on_new_message(
         event,
@@ -272,10 +311,11 @@ async def _dispatch(event, *, session_factory, minio_client, client, channel_id_
         client=client,
         channel_id_map=channel_id_map,
         bucket=bucket,
+        settings=settings,
     )
 
 
-async def _dispatch_album(event, *, session_factory, minio_client, client, channel_id_map, bucket):
+async def _dispatch_album(event, *, session_factory, minio_client, client, channel_id_map, bucket, settings):
     await on_new_album(
         event,
         session_factory=session_factory,
@@ -283,6 +323,7 @@ async def _dispatch_album(event, *, session_factory, minio_client, client, chann
         client=client,
         channel_id_map=channel_id_map,
         bucket=bucket,
+        settings=settings,
     )
 
 
@@ -292,6 +333,7 @@ async def catchup_channels(
     minio_client: Minio,
     *,
     bucket: str,
+    settings: Any,
     limit: int = 200,
 ) -> None:
     """For each active channel, fetch messages newer than the max ingested
@@ -356,6 +398,7 @@ async def catchup_channels(
                             client=client,
                             minio_client=minio_client,
                             bucket=bucket,
+                            settings=settings,
                         )
                 await session.commit()
 
@@ -374,6 +417,7 @@ async def catchup_channels(
                         client=client,
                         minio_client=minio_client,
                         bucket=bucket,
+                        settings=settings,
                     )
                 await session.commit()
         try:
@@ -392,11 +436,13 @@ async def _download_one_and_update_storage_key(
     client: TelegramClient,
     minio_client: Minio,
     bucket: str,
+    settings: Any,
 ) -> None:
     """Download a single media file (photo or video thumb) and write its
     storage_key onto the matching Media row. Tolerant of per-file errors."""
     mtype = media["type"]
     storage_key: str | None = None
+    video_key: str | None = None
     try:
         if mtype == "photo":
             storage_key = await download_and_store_photo(
@@ -407,6 +453,10 @@ async def _download_one_and_update_storage_key(
             storage_key = await download_and_store_video_thumb(
                 client, minio_client, msg,
                 channel_id=channel_id, bucket=bucket,
+            )
+            video_key = await _maybe_download_full_video(
+                client, minio_client, msg,
+                channel_id=channel_id, bucket=bucket, settings=settings,
             )
     except Exception as e:  # noqa: BLE001
         try:
@@ -424,4 +474,13 @@ async def _download_one_and_update_storage_key(
                 Media.tg_file_id == media["tg_file_id"],
             )
             .values(storage_key=storage_key)
+        )
+    if video_key is not None:
+        await session.execute(
+            update(Media)
+            .where(
+                Media.post_id == post_id,
+                Media.tg_file_id == media["tg_file_id"],
+            )
+            .values(video_storage_key=video_key)
         )
