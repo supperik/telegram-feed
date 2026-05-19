@@ -1,6 +1,7 @@
-import { useSources } from '@/features/sources/useSources';
+import { ChannelCatalogSection } from '@/features/sources/ChannelCatalogSection';
 import { AddSourceForm } from '@/features/sources/AddSourceForm';
 import { SourceListItem } from '@/features/sources/SourceListItem';
+import { useSources } from '@/features/sources/useSources';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Spinner } from '@/shared/ui/Spinner';
 import { GridIcon } from '@/shared/ui/icons';
@@ -27,17 +28,22 @@ export function SourcesScreen() {
 
       <AddSourceForm />
 
-      {count === 0 ? (
-        <EmptyState
-          icon={<GridIcon />}
-          title="Подключите первый канал"
-          body="Введите @username публичного канала — посты появятся в ленте."
-        />
-      ) : (
-        <ul className="mx-3 mb-20 overflow-hidden rounded-2xl bg-secondary shadow-card">
-          {data.items.map((i) => <SourceListItem key={i.channel.id} item={i} />)}
-        </ul>
-      )}
+      <ChannelCatalogSection />
+
+      <section className="mx-3 mt-4 mb-20">
+        <h2 className="mb-2 text-base font-semibold">Мои источники</h2>
+        {count === 0 ? (
+          <EmptyState
+            icon={<GridIcon />}
+            title="Подключите первый канал"
+            body="Введите @username публичного канала — посты появятся в ленте."
+          />
+        ) : (
+          <ul className="overflow-hidden rounded-2xl bg-secondary shadow-card">
+            {data.items.map((i) => <SourceListItem key={i.channel.id} item={i} />)}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
