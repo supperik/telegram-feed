@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { apiFetch } from '@/shared/api/client';
 import { FEED_QUERY_KEY } from '@/features/feed/useFeed';
+import { CATALOG_QUERY_KEY } from '@/features/sources/useChannelCatalog';
 import { HIDDEN_SOURCES_QUERY_KEY } from '@/features/sources/useHiddenSources';
 import { SOURCES_QUERY_KEY } from '@/features/sources/useSources';
 import type {
@@ -109,6 +110,7 @@ export function useHideSource() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: SOURCES_QUERY_KEY });
       qc.invalidateQueries({ queryKey: HIDDEN_SOURCES_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: CATALOG_QUERY_KEY });
     },
   });
 }

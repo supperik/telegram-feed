@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,12 @@ import type { SourceListItem as Item } from '@/shared/api/types';
 
 function wrap() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+}
+
+function wrapWithClient(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -78,5 +84,28 @@ describe('SourceListItem', () => {
     expect(screen.getByText('@meduza')).toBeInTheDocument();
     expect(screen.queryByText(/приватный/i)).not.toBeInTheDocument();
     expect(document.querySelector('svg[data-icon="lock"]')).not.toBeInTheDocument();
+  });
+
+  it('Delete invalidates the catalog query (so "Подписаться" appears without reload)', async () => {
+    vi.spyOn(ConfirmDialog, 'confirm').mockReturnValue(true);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    render(<SourceListItem item={item} />, { wrapper: wrapWithClient(qc) });
+    await userEvent.click(screen.getByRole('button', { name: /удалить/i }));
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['catalog'] }),
+    );
+  });
+
+  it('Hide invalidates the catalog query (so "Подписаться" appears without reload)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    render(<SourceListItem item={item} />, { wrapper: wrapWithClient(qc) });
+    await userEvent.click(screen.getByRole('button', { name: /скрыть/i }));
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['catalog'] }),
+    );
   });
 });
