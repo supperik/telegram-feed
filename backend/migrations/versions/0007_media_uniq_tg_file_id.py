@@ -4,7 +4,7 @@ Cleans up rows accidentally inserted by upsert_post's album-append branch
 on repeated catchup_channels runs (each ingester restart re-fed the album
 tail), then enforces uniqueness at the schema level so it can't recur.
 
-Revision ID: 0007_media_unique_post_id_tg_file_id
+Revision ID: 0007_media_uniq_tg_file_id
 Revises: 0006_media_video_storage_key
 Create Date: 2026-05-19
 
@@ -16,7 +16,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0007_media_unique_post_id_tg_file_id"
+revision: str = "0007_media_uniq_tg_file_id"
 down_revision: Union[str, Sequence[str], None] = "0006_media_video_storage_key"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
