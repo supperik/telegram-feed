@@ -72,7 +72,6 @@ async def test_unhide_channel_is_idempotent(db_session, seed_user) -> None:
     await db_session.commit()
     assert await db_session.get(UserHiddenChannel, (uid, ch.id)) is None
 
-    # Idempotent second unhide.
     await unhide_channel(db_session, user_id=uid, channel_id=ch.id)
     await db_session.commit()
     assert await db_session.get(UserHiddenChannel, (uid, ch.id)) is None
@@ -96,12 +95,10 @@ async def test_list_hidden_channels_returns_subscribed_hidden_sorted(
     ])
     await db_session.commit()
 
-    # Hide order: a then b — b should be first (hidden_at DESC).
     await hide_channel(db_session, user_id=uid, channel_id=ch_a.id)
     await db_session.commit()
     await hide_channel(db_session, user_id=uid, channel_id=ch_b.id)
     await db_session.commit()
-    # Hidden but not subscribed — must NOT appear.
     await hide_channel(db_session, user_id=uid, channel_id=ch_other.id)
     await db_session.commit()
 
@@ -133,3 +130,24 @@ async def test_list_hidden_channels_isolates_by_user(db_session, seed_user) -> N
     rows_two = await list_hidden_channels(db_session, user_id=uid_two)
     assert [r.channel_id for r in rows_one] == [ch.id]
     assert rows_two == []
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_hidden_channels_excludes_banned(db_session, seed_user) -> None:
+    uid = await seed_user(tg_user_id=55)
+    ch_ok = Channel(tg_chat_id=91401, username="ok", title="OK")
+    ch_banned = Channel(tg_chat_id=91402, username="bad", title="BAD", banned=True)
+    db_session.add_all([ch_ok, ch_banned])
+    await db_session.commit()
+    db_session.add_all([
+        UserSource(user_id=uid, channel_id=ch_ok.id),
+        UserSource(user_id=uid, channel_id=ch_banned.id),
+    ])
+    await db_session.commit()
+    await hide_channel(db_session, user_id=uid, channel_id=ch_ok.id)
+    await hide_channel(db_session, user_id=uid, channel_id=ch_banned.id)
+    await db_session.commit()
+
+    rows = await list_hidden_channels(db_session, user_id=uid)
+    assert [r.channel_id for r in rows] == [ch_ok.id]

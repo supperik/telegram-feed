@@ -85,7 +85,7 @@ async def list_hidden_channels(
             (UserSource.channel_id == Channel.id)
             & (UserSource.user_id == UserHiddenChannel.user_id),
         )
-        .where(UserHiddenChannel.user_id == user_id)
+        .where(UserHiddenChannel.user_id == user_id, Channel.banned.is_(False))
         .order_by(UserHiddenChannel.hidden_at.desc(), Channel.id.desc())
     )
     res = await session.execute(stmt)
