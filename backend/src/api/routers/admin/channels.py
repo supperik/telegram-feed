@@ -10,6 +10,7 @@ from shared.models import Admin
 from shared.repositories.admins import (
     ban_channel,
     get_channel_or_none,
+    get_channel_row_for_admin,
     list_channels_for_admin,
     unban_channel,
 )
@@ -105,15 +106,10 @@ async def ban_channel_endpoint(
         target={"channel_id": channel_id, "reason": body.reason},
     )
     await db.commit()
-    return ChannelOut(
-        id=updated.id, tg_chat_id=updated.tg_chat_id,
-        username=updated.username, title=updated.title,
-        description=updated.description,
-        photo_url=channel_photo_url(updated.id, updated.photo_storage_key),
-        posts_count=updated.posts_count, ref_count=0,
-        banned=updated.banned, banned_reason=updated.banned_reason,
-        last_post_at=updated.last_post_at, created_at=updated.created_at,
-    )
+    row = await get_channel_row_for_admin(db, channel_id)
+    if row is None:
+        raise _not_found()
+    return _channel_out_from_row(row)
 
 
 @router.post("/{channel_id}/unban", response_model=ChannelOut)
@@ -135,12 +131,7 @@ async def unban_channel_endpoint(
         target={"channel_id": channel_id},
     )
     await db.commit()
-    return ChannelOut(
-        id=updated.id, tg_chat_id=updated.tg_chat_id,
-        username=updated.username, title=updated.title,
-        description=updated.description,
-        photo_url=channel_photo_url(updated.id, updated.photo_storage_key),
-        posts_count=updated.posts_count, ref_count=0,
-        banned=updated.banned, banned_reason=updated.banned_reason,
-        last_post_at=updated.last_post_at, created_at=updated.created_at,
-    )
+    row = await get_channel_row_for_admin(db, channel_id)
+    if row is None:
+        raise _not_found()
+    return _channel_out_from_row(row)

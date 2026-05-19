@@ -3,10 +3,10 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import Channel, ChannelSubscription
+from shared.models import Channel, ChannelSubscription, Post
 
 
 MAX_CHANNELS_LIMIT = 200
@@ -27,6 +27,47 @@ def _decode_cursor(cursor: str) -> tuple[bool, datetime | None, int]:
     return bool(payload["b"]), last_post_at, int(payload["id"])
 
 
+def _admin_channel_select() -> tuple[Select, Any, Any]:
+    """SELECT used by both list and single-channel admin views.
+
+    Returns the base statement plus the labelled (last_post_at, posts_count)
+    columns so callers can reuse them for ORDER BY / WHERE without rebuilding
+    the aggregate subquery.
+    """
+    posts_agg = (
+        select(
+            Post.channel_id.label("channel_id"),
+            func.count(Post.id).label("posts_count"),
+            func.max(Post.posted_at).label("last_post_at"),
+        )
+        .group_by(Post.channel_id)
+        .subquery()
+    )
+    last_post_col = posts_agg.c.last_post_at
+    posts_count_col = func.coalesce(posts_agg.c.posts_count, 0)
+
+    stmt = (
+        select(
+            Channel.id,
+            Channel.tg_chat_id,
+            Channel.username,
+            Channel.title,
+            Channel.description,
+            Channel.photo_storage_key,
+            posts_count_col.label("posts_count"),
+            Channel.banned,
+            Channel.banned_reason,
+            last_post_col.label("last_post_at"),
+            Channel.created_at,
+            func.coalesce(ChannelSubscription.ref_count, 0).label("ref_count"),
+        )
+        .select_from(Channel)
+        .outerjoin(posts_agg, posts_agg.c.channel_id == Channel.id)
+        .outerjoin(ChannelSubscription, ChannelSubscription.channel_id == Channel.id)
+    )
+    return stmt, last_post_col, posts_count_col
+
+
 async def list_channels_for_admin(
     session: AsyncSession,
     *,
@@ -34,25 +75,18 @@ async def list_channels_for_admin(
     cursor: str | None = None,
     limit: int = 50,
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Paginated channel list with metrics. Sort: banned DESC, last_post_at DESC NULLS LAST, id DESC."""
+    """Paginated channel list with metrics. Sort: banned DESC, last_post_at DESC NULLS LAST, id DESC.
+
+    posts_count and last_post_at are computed live from the posts table
+    (the matching columns on `channels` are not maintained).
+    """
     limit = max(1, min(MAX_CHANNELS_LIMIT, limit))
-    stmt = (
-        select(
-            Channel.id, Channel.tg_chat_id, Channel.username, Channel.title,
-            Channel.description, Channel.photo_storage_key, Channel.posts_count,
-            Channel.banned, Channel.banned_reason, Channel.last_post_at,
-            Channel.created_at,
-            func.coalesce(ChannelSubscription.ref_count, 0).label("ref_count"),
-        )
-        .select_from(Channel)
-        .outerjoin(ChannelSubscription, ChannelSubscription.channel_id == Channel.id)
-        .order_by(
-            Channel.banned.desc(),
-            Channel.last_post_at.desc().nulls_last(),
-            Channel.id.desc(),
-        )
-        .limit(limit + 1)
-    )
+    stmt, last_post_col, _ = _admin_channel_select()
+    stmt = stmt.order_by(
+        Channel.banned.desc(),
+        last_post_col.desc().nulls_last(),
+        Channel.id.desc(),
+    ).limit(limit + 1)
 
     if q:
         pattern = f"%{q}%"
@@ -72,7 +106,7 @@ async def list_channels_for_admin(
             # Below it within same banned bucket: lp is null AND id < c_id.
             same_or_less = and_(
                 Channel.banned == c_banned,
-                Channel.last_post_at.is_(None),
+                last_post_col.is_(None),
                 Channel.id < c_id,
             )
             stmt = stmt.where(or_(less_banned, same_or_less))
@@ -80,13 +114,13 @@ async def list_channels_for_admin(
             same_banned_less_lp = and_(
                 Channel.banned == c_banned,
                 or_(
-                    Channel.last_post_at < c_lp,
-                    Channel.last_post_at.is_(None),
+                    last_post_col < c_lp,
+                    last_post_col.is_(None),
                 ),
             )
             same_banned_same_lp_less_id = and_(
                 Channel.banned == c_banned,
-                Channel.last_post_at == c_lp,
+                last_post_col == c_lp,
                 Channel.id < c_id,
             )
             stmt = stmt.where(
@@ -103,6 +137,18 @@ async def list_channels_for_admin(
         next_cursor = _encode_cursor(last["banned"], last["last_post_at"], last["id"])
 
     return [dict(r) for r in rows], next_cursor
+
+
+async def get_channel_row_for_admin(
+    session: AsyncSession, channel_id: int
+) -> dict[str, Any] | None:
+    """Single-channel variant of list_channels_for_admin: same shape (incl.
+    aggregated posts_count / last_post_at / ref_count), filtered by id."""
+    stmt, _, _ = _admin_channel_select()
+    stmt = stmt.where(Channel.id == channel_id)
+    res = await session.execute(stmt)
+    row = res.mappings().first()
+    return dict(row) if row else None
 
 
 async def get_channel_or_none(session: AsyncSession, channel_id: int) -> Channel | None:

@@ -70,6 +70,14 @@ describe("ChannelsScreen", () => {
     expect(screen.getByText("beta")).toBeInTheDocument();
     // Banned column for second row
     expect(screen.getByText(/spam/)).toBeInTheDocument();
+    // Column header for subscriber count is human-readable, not "Refs".
+    expect(
+      screen.getByRole("columnheader", { name: "Subscribers" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Refs" })).toBeNull();
+    // posts_count and ref_count cells render the numeric values from the API.
+    expect(screen.getByRole("cell", { name: "42" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "10" })).toBeInTheDocument();
     // Action buttons: one Ban (for alpha), one Unban (for beta)
     expect(screen.getByRole("button", { name: /^Ban$/ })).toBeInTheDocument();
     expect(

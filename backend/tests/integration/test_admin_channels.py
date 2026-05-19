@@ -113,6 +113,63 @@ def test_list_channels_happy_path(configured_env, admin_record, channels):
         assert body["channels"][0]["banned"] is True
 
 
+def _seed_posts_for_channel(pg_container, channel_id: int, posted_ats: list[datetime]):
+    from shared.db import make_engine, make_session_factory
+    from shared.models import Post
+
+    async def run():
+        engine = make_engine(pg_container["async_url"])
+        sf = make_session_factory(engine)
+        async with sf() as s:
+            for i, pa in enumerate(posted_ats):
+                s.add(Post(
+                    channel_id=channel_id,
+                    tg_message_id=100 + i,
+                    posted_at=pa,
+                ))
+            await s.commit()
+        await engine.dispose()
+
+    asyncio.run(run())
+
+
+@pytest.mark.integration
+def test_list_channels_aggregates_posts_count_and_last_post_at(
+    configured_env, admin_record, channels, pg_container,
+):
+    """posts_count and last_post_at must come from the posts table, not from
+    the (unmaintained) channels.posts_count / channels.last_post_at columns."""
+    from api.main import app
+
+    target = next(c for c in channels if c["title"].endswith("#2"))
+    posted_ats = [
+        datetime(2026, 5, 1, 10, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 17, 9, 30, tzinfo=timezone.utc),  # max
+        datetime(2026, 5, 10, 8, 15, tzinfo=timezone.utc),
+    ]
+    _seed_posts_for_channel(pg_container, target["id"], posted_ats)
+    zero_target = next(c for c in channels if c["id"] != target["id"])
+
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        r = client.get(
+            "/admin/channels",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200, r.text
+        by_id = {c["id"]: c for c in r.json()["channels"]}
+
+        row = by_id[target["id"]]
+        assert row["posts_count"] == 3
+        assert row["last_post_at"].startswith("2026-05-17T09:30")
+
+        # Channels with no posts must show 0 / None even if the dead
+        # channels.posts_count column was seeded to a nonzero value.
+        zero = by_id[zero_target["id"]]
+        assert zero["posts_count"] == 0
+        assert zero["last_post_at"] is None
+
+
 @pytest.mark.integration
 def test_list_channels_q_filter(configured_env, admin_record, channels):
     from api.main import app

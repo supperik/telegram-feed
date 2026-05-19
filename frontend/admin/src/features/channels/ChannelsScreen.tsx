@@ -72,7 +72,7 @@ export function ChannelsScreen() {
               <Th>Username</Th>
               <Th>Title</Th>
               <Th>Posts</Th>
-              <Th>Refs</Th>
+              <Th>Subscribers</Th>
               <Th>Last post</Th>
               <Th>Banned</Th>
               <Th>Action</Th>
