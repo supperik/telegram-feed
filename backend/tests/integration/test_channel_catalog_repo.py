@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete
@@ -11,7 +9,12 @@ from shared.models import (
     UserCatalogHiddenChannel,
     UserSource,
 )
-from shared.repositories.channel_catalog import list_catalog_available
+from shared.repositories.channel_catalog import (
+    hide_from_catalog,
+    list_catalog_available,
+    list_catalog_hidden,
+    unhide_from_catalog,
+)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -181,3 +184,100 @@ async def test_list_available_marks_is_subscribed(db_session, seed_user) -> None
     )
     assert len(rows) == 1
     assert rows[0].is_subscribed is True
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_q_filter_treats_wildcards_as_literals(
+    db_session, seed_user
+) -> None:
+    uid = await seed_user(tg_user_id=120)
+    # Note: username `cat_other` is already used by the case-insensitive test
+    # earlier in the file; the autouse cleanup fixture wipes subscriptions but
+    # leaves Channel rows behind. Use a unique username here.
+    ch_pct = Channel(
+        tg_chat_id=8001, username="cat_pct", title="100% real", posts_count=1,
+    )
+    ch_other = Channel(
+        tg_chat_id=8002, username="cat_pct_other", title="other channel", posts_count=1,
+    )
+    db_session.add_all([ch_pct, ch_other])
+    await db_session.commit()
+    for c in (ch_pct, ch_other):
+        db_session.add(ChannelSubscription(channel_id=c.id, status="active", ref_count=1))
+    await db_session.commit()
+
+    # `%` must be treated as a literal — only the row with literal % should match.
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        q="100%",
+    )
+    assert [r.channel_id for r in rows] == [ch_pct.id]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_hide_unhide_round_trip_idempotent(db_session, seed_user) -> None:
+    uid = await seed_user(tg_user_id=110)
+    ch = Channel(tg_chat_id=6001, username="cat_z", title="Z", posts_count=1)
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="active", ref_count=1))
+    await db_session.commit()
+
+    await hide_from_catalog(db_session, user_id=uid, channel_id=ch.id)
+    await hide_from_catalog(db_session, user_id=uid, channel_id=ch.id)  # idempotent
+    await db_session.commit()
+    assert (
+        await db_session.get(UserCatalogHiddenChannel, (uid, ch.id))
+    ) is not None
+
+    await unhide_from_catalog(db_session, user_id=uid, channel_id=ch.id)
+    await unhide_from_catalog(db_session, user_id=uid, channel_id=ch.id)  # idempotent
+    await db_session.commit()
+    assert (
+        await db_session.get(UserCatalogHiddenChannel, (uid, ch.id))
+    ) is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_hidden_returns_only_user_hidden_sorted_by_hidden_at_desc(
+    db_session, seed_user
+) -> None:
+    uid = await seed_user(tg_user_id=111)
+    other = await seed_user(tg_user_id=112)
+    c_a = Channel(tg_chat_id=7001, username="cat_ha", title="HA", posts_count=1)
+    c_b = Channel(tg_chat_id=7002, username="cat_hb", title="HB", posts_count=1)
+    c_c = Channel(tg_chat_id=7003, username="cat_hc", title="HC", posts_count=1)
+    c_banned = Channel(
+        tg_chat_id=7004, username="cat_hban", title="HBan", posts_count=1, banned=True,
+    )
+    db_session.add_all([c_a, c_b, c_c, c_banned])
+    await db_session.commit()
+    for c in (c_a, c_b, c_c, c_banned):
+        db_session.add(ChannelSubscription(channel_id=c.id, status="active", ref_count=1))
+    await db_session.commit()
+
+    # uid hid a, then c, then banned. b is hidden by `other`.
+    await hide_from_catalog(db_session, user_id=uid, channel_id=c_a.id)
+    await db_session.commit()
+    await hide_from_catalog(db_session, user_id=uid, channel_id=c_c.id)
+    await db_session.commit()
+    await hide_from_catalog(db_session, user_id=uid, channel_id=c_banned.id)
+    await db_session.commit()
+    await hide_from_catalog(db_session, user_id=other, channel_id=c_b.id)
+    await db_session.commit()
+
+    rows = await list_catalog_hidden(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_hidden(),
+        limit=50,
+    )
+    # banned excluded, only uid's hidden, newest first
+    assert [r.channel_id for r in rows] == [c_c.id, c_a.id]
+    assert all(r.is_hidden_from_catalog for r in rows)
