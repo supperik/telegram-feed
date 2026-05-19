@@ -47,9 +47,14 @@ describe('PostCard', () => {
     expect(screen.getByText(/@meduza/)).toBeInTheDocument();
   });
 
-  it('shows view count when present', () => {
-    render(<PostCard post={post} />, { wrapper: wrap() });
-    expect(screen.getByText(/100/)).toBeInTheDocument();
+  it('does not render view or forward counts on the card', () => {
+    const { container } = render(<PostCard post={post} />, { wrapper: wrap() });
+    // The card no longer surfaces social-proof metrics: '100' was the views
+    // count and would only appear via the (now removed) EyeIcon row.
+    expect(container.textContent).not.toContain('100');
+    // '1' alone is too generic to assert directly, so we anchor on the absence
+    // of the share icon rendering for forwards.
+    expect(container.querySelectorAll('footer span').length).toBe(0);
   });
 
   it('renders "Open in Telegram" with t.me/<username>/<msg> href for a public channel', () => {

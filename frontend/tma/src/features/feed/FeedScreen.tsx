@@ -45,9 +45,9 @@ export function FeedScreen() {
       <header className="flex items-end justify-between px-4 pb-1 pt-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Лента</h1>
-          <div className="mt-0.5 text-xs text-hint">
-            {isFetching ? 'обновляем…' : `постов: ${posts.length}`}
-          </div>
+          {isFetching ? (
+            <div className="mt-0.5 text-xs text-hint">обновляем…</div>
+          ) : null}
         </div>
         <IconButton
           aria-label="Refresh feed"
