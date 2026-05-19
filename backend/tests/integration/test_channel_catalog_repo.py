@@ -35,7 +35,7 @@ async def _reset_catalog_dependent_rows(db_session):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
+async def test_list_available_excludes_banned_inactive_no_posts_and_hidden(
     db_session, seed_user
 ) -> None:
     uid = await seed_user(tg_user_id=101)
@@ -48,11 +48,16 @@ async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
     )
     # inactive subscription — must NOT appear
     ch_inactive = Channel(tg_chat_id=1003, username="cat_c", title="C", posts_count=3)
-    # ref_count == 0 orphan — must NOT appear
+    # ref_count == 0 orphan but has posts — MUST appear (so a user can re-subscribe
+    # via the catalog after being the last unsubscriber)
     ch_orphan = Channel(tg_chat_id=1004, username="cat_d", title="D", posts_count=2)
     # active but hidden by this user — must NOT appear
     ch_hidden = Channel(tg_chat_id=1005, username="cat_e", title="E", posts_count=20)
-    db_session.add_all([ch_active, ch_banned, ch_inactive, ch_orphan, ch_hidden])
+    # posts_count == 0 — must NOT appear (no content yet)
+    ch_no_posts = Channel(tg_chat_id=1006, username="cat_f", title="F", posts_count=0)
+    db_session.add_all(
+        [ch_active, ch_banned, ch_inactive, ch_orphan, ch_hidden, ch_no_posts]
+    )
     await db_session.commit()
 
     db_session.add_all([
@@ -61,6 +66,7 @@ async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
         ChannelSubscription(channel_id=ch_inactive.id, status="failed", ref_count=1),
         ChannelSubscription(channel_id=ch_orphan.id, status="active", ref_count=0),
         ChannelSubscription(channel_id=ch_hidden.id, status="active", ref_count=1),
+        ChannelSubscription(channel_id=ch_no_posts.id, status="active", ref_count=1),
         UserCatalogHiddenChannel(user_id=uid, channel_id=ch_hidden.id),
     ])
     await db_session.commit()
@@ -72,7 +78,8 @@ async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
         limit=50,
         q=None,
     )
-    assert [r.channel_id for r in rows] == [ch_active.id]
+    # Sort: posts_count DESC, id DESC → ch_active (10), ch_orphan (2)
+    assert [r.channel_id for r in rows] == [ch_active.id, ch_orphan.id]
 
 
 @pytest.mark.integration
