@@ -169,3 +169,62 @@ async def test_get_catalog_rejects_mismatched_cursor_view(
     )
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "bad_cursor"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_hide_unhide_endpoints_round_trip(
+    async_client, db_session, seed_user,
+):
+    uid = await seed_user(tg_user_id=310)
+    ch = await _seed_active_channel(
+        db_session, tg_chat_id=15001, username="cat_router_hh", title="HH", posts_count=1,
+    )
+    r1 = await async_client.post(
+        f"/channels/catalog/{ch.id}/hide", headers=_auth(uid)
+    )
+    assert r1.status_code == 204
+    r2 = await async_client.post(
+        f"/channels/catalog/{ch.id}/hide", headers=_auth(uid)
+    )
+    assert r2.status_code == 204
+
+    r3 = await async_client.delete(
+        f"/channels/catalog/{ch.id}/hide", headers=_auth(uid)
+    )
+    assert r3.status_code == 204
+    r4 = await async_client.delete(
+        f"/channels/catalog/{ch.id}/hide", headers=_auth(uid)
+    )
+    assert r4.status_code == 204
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_hide_endpoint_404_for_missing_channel(async_client, seed_user):
+    uid = await seed_user(tg_user_id=311)
+    r = await async_client.post(
+        "/channels/catalog/999999/hide", headers=_auth(uid)
+    )
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "channel_not_found"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_hide_moves_channel_between_views(async_client, db_session, seed_user):
+    uid = await seed_user(tg_user_id=312)
+    ch = await _seed_active_channel(
+        db_session, tg_chat_id=16001, username="cat_router_mv", title="MV", posts_count=1,
+    )
+    r_av = await async_client.get("/channels/catalog", headers=_auth(uid))
+    assert [i["channel"]["id"] for i in r_av.json()["items"]] == [ch.id]
+
+    await async_client.post(
+        f"/channels/catalog/{ch.id}/hide", headers=_auth(uid)
+    )
+
+    r_av2 = await async_client.get("/channels/catalog", headers=_auth(uid))
+    assert r_av2.json()["items"] == []
+    r_hi = await async_client.get("/channels/catalog?view=hidden", headers=_auth(uid))
+    assert [i["channel"]["id"] for i in r_hi.json()["items"]] == [ch.id]

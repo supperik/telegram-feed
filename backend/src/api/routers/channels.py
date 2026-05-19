@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Iterator, Literal
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,8 +24,10 @@ from shared.auth.jwt import decode_access
 from shared.config import Settings
 from shared.models import Channel, User
 from shared.repositories.channel_catalog import (
+    hide_from_catalog,
     list_catalog_available,
     list_catalog_hidden,
+    unhide_from_catalog,
 )
 from shared.storage import make_storage_client
 
@@ -118,6 +120,34 @@ async def get_catalog(
             ).encode()
 
     return CatalogPage(items=items, next_cursor=next_cursor)
+
+
+@router.post("/catalog/{channel_id}/hide", status_code=204)
+async def hide_catalog_channel(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    if await db.get(Channel, channel_id) is None:
+        raise APIError(
+            code="channel_not_found", message="Channel not found", status_code=404,
+        )
+    await hide_from_catalog(db, user_id=user.id, channel_id=channel_id)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/catalog/{channel_id}/hide", status_code=204)
+async def unhide_catalog_channel(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    # DELETE — idempotent; not checking channel existence is intentional
+    # (delete-from-missing is a no-op in Postgres).
+    await unhide_from_catalog(db, user_id=user.id, channel_id=channel_id)
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/{channel_id}/photo")
