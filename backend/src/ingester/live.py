@@ -18,11 +18,7 @@ from telethon.tl.types import PeerChannel
 from telethon.utils import get_peer_id
 
 from ingester.normalize import normalize_album, normalize_message
-from ingester.photos import (
-    _maybe_download_full_video,
-    download_and_store_photo,
-    download_and_store_video_thumb,
-)
+from ingester.photos import download_and_store_photo
 from shared.models import Channel, ChannelSubscription, Media, Post
 from shared.repositories.posts import upsert_post
 
@@ -140,25 +136,18 @@ async def on_new_album(
             return
 
         # Download one file per source message, in the same order as media.
+        # Videos are intentionally not downloaded — the TMA renders a compact
+        # "open in Telegram" link for them, so neither thumb nor full bytes
+        # are stored.
         ordered_msgs = sorted(messages, key=lambda m: int(m.id))
         for media, msg in zip(media_values, ordered_msgs):
             mtype = media["type"]
             storage_key: str | None = None
-            video_key: str | None = None
             try:
                 if mtype == "photo":
                     storage_key = await download_and_store_photo(
                         client, minio_client, msg,
                         channel_id=channel_id, bucket=bucket,
-                    )
-                elif mtype == "video":
-                    storage_key = await download_and_store_video_thumb(
-                        client, minio_client, msg,
-                        channel_id=channel_id, bucket=bucket,
-                    )
-                    video_key = await _maybe_download_full_video(
-                        client, minio_client, msg,
-                        channel_id=channel_id, bucket=bucket, settings=settings,
                     )
             except Exception as e:  # noqa: BLE001
                 try:
@@ -177,15 +166,6 @@ async def on_new_album(
                     )
                     .values(storage_key=storage_key)
                 )
-            if video_key is not None:
-                await session.execute(
-                    update(Media)
-                    .where(
-                        Media.post_id == post_id,
-                        Media.tg_file_id == media["tg_file_id"],
-                    )
-                    .values(video_storage_key=video_key)
-                )
         await session.commit()
 
 
@@ -201,28 +181,19 @@ async def download_and_set_storage_keys(
     bucket: str,
     settings: Any,
 ) -> None:
-    """Download photo / video-thumb for each new media row and UPDATE
-    storage_key. Tolerant of per-media failures."""
+    """Download photo for each new media row and UPDATE storage_key. Videos
+    and documents are intentionally skipped — the TMA renders a compact
+    "open in Telegram" link for them, so neither thumb nor full bytes are
+    stored. Tolerant of per-media failures."""
     for media in media_values:
         mtype = media["type"]
         storage_key: str | None = None
-        video_key: str | None = None
         try:
             if mtype == "photo":
                 storage_key = await download_and_store_photo(
                     client, minio_client, msg,
                     channel_id=channel_id, bucket=bucket,
                 )
-            elif mtype == "video":
-                storage_key = await download_and_store_video_thumb(
-                    client, minio_client, msg,
-                    channel_id=channel_id, bucket=bucket,
-                )
-                video_key = await _maybe_download_full_video(
-                    client, minio_client, msg,
-                    channel_id=channel_id, bucket=bucket, settings=settings,
-                )
-            # documents: no download for MVP.
         except Exception as e:  # noqa: BLE001
             try:
                 log.warning("live.download_failed",
@@ -239,15 +210,6 @@ async def download_and_set_storage_keys(
                     Media.tg_file_id == media["tg_file_id"],
                 )
                 .values(storage_key=storage_key)
-            )
-        if video_key is not None:
-            await session.execute(
-                update(Media)
-                .where(
-                    Media.post_id == new_post_id,
-                    Media.tg_file_id == media["tg_file_id"],
-                )
-                .values(video_storage_key=video_key)
             )
 
 
@@ -438,25 +400,16 @@ async def _download_one_and_update_storage_key(
     bucket: str,
     settings: Any,
 ) -> None:
-    """Download a single media file (photo or video thumb) and write its
-    storage_key onto the matching Media row. Tolerant of per-file errors."""
+    """Download a single photo and write its storage_key onto the matching
+    Media row. Videos are intentionally skipped — see download_and_set_storage_keys.
+    Tolerant of per-file errors."""
     mtype = media["type"]
     storage_key: str | None = None
-    video_key: str | None = None
     try:
         if mtype == "photo":
             storage_key = await download_and_store_photo(
                 client, minio_client, msg,
                 channel_id=channel_id, bucket=bucket,
-            )
-        elif mtype == "video":
-            storage_key = await download_and_store_video_thumb(
-                client, minio_client, msg,
-                channel_id=channel_id, bucket=bucket,
-            )
-            video_key = await _maybe_download_full_video(
-                client, minio_client, msg,
-                channel_id=channel_id, bucket=bucket, settings=settings,
             )
     except Exception as e:  # noqa: BLE001
         try:
@@ -474,13 +427,4 @@ async def _download_one_and_update_storage_key(
                 Media.tg_file_id == media["tg_file_id"],
             )
             .values(storage_key=storage_key)
-        )
-    if video_key is not None:
-        await session.execute(
-            update(Media)
-            .where(
-                Media.post_id == post_id,
-                Media.tg_file_id == media["tg_file_id"],
-            )
-            .values(video_storage_key=video_key)
         )

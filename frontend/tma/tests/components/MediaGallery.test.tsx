@@ -90,20 +90,22 @@ describe('MediaGallery', () => {
 });
 
 describe('MediaGallery — video tile', () => {
-  it('falls back to thumb-tile when has_video_file is false', () => {
-    render(<MediaGallery media={[videoMedia()]} channel={channel} tgMessageId={1} />);
-    expect(screen.queryByTestId('inline-video')).toBeNull();
-    // Existing thumb-tile renders an anchor (current behavior)
-    expect(screen.getByRole('link')).toBeInTheDocument();
-  });
-
-  it('renders inline <video> when has_video_file is true', () => {
-    const m = videoMedia({ has_video_file: true });
-    render(<MediaGallery media={[m]} channel={channel} tgMessageId={1} />);
-    const v = screen.getByTestId('inline-video') as HTMLVideoElement;
-    expect(v.tagName).toBe('VIDEO');
-    expect(v.getAttribute('src')).toContain(`/media/${m.id}/video`);
-    expect(v.getAttribute('poster')).toContain(`/media/${m.id}`);
+  it('renders a compact "open in Telegram" link regardless of has_video_file', () => {
+    // Both has_video_file values must yield the same compact link: we never
+    // play video inline anymore — every tap goes to Telegram.
+    for (const hvf of [false, true]) {
+      const { unmount } = render(
+        <MediaGallery
+          media={[videoMedia({ has_video_file: hvf })]}
+          channel={channel}
+          tgMessageId={1}
+        />,
+      );
+      expect(screen.queryByTestId('inline-video')).toBeNull();
+      expect(screen.getByRole('link')).toBeInTheDocument();
+      expect(screen.getByText(/Видео/)).toBeInTheDocument();
+      unmount();
+    }
   });
 });
 

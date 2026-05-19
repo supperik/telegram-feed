@@ -34,12 +34,10 @@ def test_on_new_message_normalizes_inserts_and_downloads_photo(monkeypatch):
           "size_bytes": None, "position": 0}],
     ))
     fake_download = AsyncMock(return_value="photos/7/42_p1.jpg")
-    fake_download_thumb = AsyncMock()  # not called for photo path
 
     monkeypatch.setattr(live, "normalize_message", fake_normalize)
     monkeypatch.setattr(live, "upsert_post", fake_upsert)
     monkeypatch.setattr(live, "download_and_store_photo", fake_download)
-    monkeypatch.setattr(live, "download_and_store_video_thumb", fake_download_thumb)
 
     # The handler updates the inserted Media row's storage_key with a SQL UPDATE.
     # We capture that by mocking session.execute.
@@ -89,12 +87,10 @@ def test_on_new_message_skips_duplicate(monkeypatch):
     ))
     fake_upsert = AsyncMock(return_value=None)  # already existed
     fake_download = AsyncMock()
-    fake_download_thumb = AsyncMock()
 
     monkeypatch.setattr(live, "normalize_message", fake_normalize)
     monkeypatch.setattr(live, "upsert_post", fake_upsert)
     monkeypatch.setattr(live, "download_and_store_photo", fake_download)
-    monkeypatch.setattr(live, "download_and_store_video_thumb", fake_download_thumb)
 
     session = MagicMock()
     session.execute = AsyncMock()
@@ -121,7 +117,6 @@ def test_on_new_message_skips_duplicate(monkeypatch):
 
     fake_upsert.assert_awaited_once()
     fake_download.assert_not_awaited()
-    fake_download_thumb.assert_not_awaited()
 
 
 def test_subscribe_to_active_channels_loads_map_and_attaches_handler(monkeypatch):
@@ -253,10 +248,11 @@ def test_catchup_channels_fetches_missed_messages(monkeypatch):
     assert fake_upsert.await_count == 3
 
 
-def test_catchup_channels_downloads_media_for_new_posts(monkeypatch):
-    """Catchup must download photo/video thumbs and set storage_key, matching
-    on_new_message behaviour. Regression for: every catchup-inserted Media
-    row landed with storage_key=NULL, so /api/media/{id} returned 404."""
+def test_catchup_channels_downloads_photo_but_skips_video(monkeypatch):
+    """Catchup downloads photos and sets their storage_key. Videos are
+    intentionally NOT downloaded — the TMA renders a compact "open in
+    Telegram" link for them — so no UPDATE is issued for video media rows.
+    """
     from ingester import live
 
     fake_client = MagicMock()
@@ -295,12 +291,10 @@ def test_catchup_channels_downloads_media_for_new_posts(monkeypatch):
     ])
     fake_upsert = AsyncMock(return_value=42)
     fake_download_photo = AsyncMock(return_value="photos/7/10_p1.jpg")
-    fake_download_thumb = AsyncMock(return_value="video_thumbs/7/11_v1.jpg")
 
     monkeypatch.setattr(live, "normalize_message", fake_normalize)
     monkeypatch.setattr(live, "upsert_post", fake_upsert)
     monkeypatch.setattr(live, "download_and_store_photo", fake_download_photo)
-    monkeypatch.setattr(live, "download_and_store_video_thumb", fake_download_thumb)
 
     async def run():
         await live.catchup_channels(
@@ -309,12 +303,8 @@ def test_catchup_channels_downloads_media_for_new_posts(monkeypatch):
 
     asyncio.run(run())
 
-    # Both downloads ran exactly once for their respective media types.
+    # Photo downloaded once. Video never reaches a downloader.
     fake_download_photo.assert_awaited_once()
-    fake_download_thumb.assert_awaited_once()
-    # session.execute is called: 1x for targets SELECT + 1x upsert is mocked +
-    # 2x UPDATE Media.storage_key (photo + video). So at minimum 3 executes.
-    assert session.execute.await_count >= 3
 
 
 def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
@@ -348,12 +338,10 @@ def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
     ))
     fake_upsert = AsyncMock(return_value=None)  # duplicate
     fake_download_photo = AsyncMock()
-    fake_download_thumb = AsyncMock()
 
     monkeypatch.setattr(live, "normalize_message", fake_normalize)
     monkeypatch.setattr(live, "upsert_post", fake_upsert)
     monkeypatch.setattr(live, "download_and_store_photo", fake_download_photo)
-    monkeypatch.setattr(live, "download_and_store_video_thumb", fake_download_thumb)
 
     async def run():
         await live.catchup_channels(
@@ -363,7 +351,6 @@ def test_catchup_channels_skips_download_for_duplicates(monkeypatch):
     asyncio.run(run())
 
     fake_download_photo.assert_not_awaited()
-    fake_download_thumb.assert_not_awaited()
 
 
 def test_on_new_message_skips_grouped_messages(monkeypatch):
