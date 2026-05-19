@@ -133,11 +133,16 @@ async def _post_join(session, *, row, chat):
     Channel ORM object so callers can run backfill outside the session block
     (Telethon Channel from chat object is passed in separately and not stored).
     """
+    raw_username = getattr(chat, "username", None)
+    # Telegram usernames are ASCII [A-Za-z0-9_]; lowercase so a later POST
+    # /sources lookup (which lowercases its input) hits this row instead of
+    # re-queuing the same channel under a different case. See cfm.
+    username = raw_username.lower() if raw_username else None
     channel = await upsert_channel(
         session,
         tg_chat_id=int(chat.id),
-        username=getattr(chat, "username", None),
-        title=getattr(chat, "title", None) or getattr(chat, "username", None) or "(no title)",
+        username=username,
+        title=getattr(chat, "title", None) or raw_username or "(no title)",
     )
     if row.kind == "private_invite" and row.invite_hash:
         await session.execute(

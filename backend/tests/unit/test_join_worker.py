@@ -646,6 +646,68 @@ async def test_post_join_writes_invite_hash_for_private_invite(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_post_join_lowercases_channel_username(monkeypatch):
+    """Telethon may return chat.username in mixed case ('DurovChannel'). The
+    stored channels.username must be ASCII-lowercase, because POST /sources
+    lowercases its input before SELECT (api/routers/sources.py
+    _add_public_source). Without normalization in the ingester, a later
+    request with 'durovchannel' misses the existing row and re-queues an
+    unnecessary join.
+    """
+    from ingester.join_worker import _post_join
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    captured: dict[str, str | None] = {}
+
+    async def fake_upsert(_session, *, tg_chat_id, username, title, **_kw):
+        captured["username"] = username
+        return MagicMock(id=7, tg_chat_id=tg_chat_id)
+
+    monkeypatch.setattr("ingester.join_worker.upsert_channel", fake_upsert)
+    monkeypatch.setattr("ingester.join_worker.add_user_source", AsyncMock())
+    monkeypatch.setattr("ingester.join_worker.mark_join_done", AsyncMock())
+
+    row = MagicMock(
+        id=1, requested_by_user_id=42, kind="public_username", invite_hash=None,
+    )
+    chat = MagicMock(id=12345, username="DurovChannel", title="Durov")
+
+    await _post_join(session, row=row, chat=chat)
+
+    assert captured["username"] == "durovchannel"
+
+
+@pytest.mark.asyncio
+async def test_post_join_keeps_none_username_for_private_channel(monkeypatch):
+    """Private channels (joined via invite hash) have chat.username == None;
+    normalization must keep that as None instead of crashing on .lower().
+    """
+    from ingester.join_worker import _post_join
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    captured: dict[str, str | None] = {}
+
+    async def fake_upsert(_session, *, tg_chat_id, username, title, **_kw):
+        captured["username"] = username
+        return MagicMock(id=7, tg_chat_id=tg_chat_id)
+
+    monkeypatch.setattr("ingester.join_worker.upsert_channel", fake_upsert)
+    monkeypatch.setattr("ingester.join_worker.add_user_source", AsyncMock())
+    monkeypatch.setattr("ingester.join_worker.mark_join_done", AsyncMock())
+
+    row = MagicMock(
+        id=1, requested_by_user_id=42, kind="private_invite", invite_hash="abc",
+    )
+    chat = MagicMock(id=12345, username=None, title="Secret")
+
+    await _post_join(session, row=row, chat=chat)
+
+    assert captured["username"] is None
+
+
+@pytest.mark.asyncio
 async def test_post_join_skips_invite_hash_for_public_username(monkeypatch):
     """T8: for public-username joins, _post_join must NOT touch
     channels.invite_hash — there's nothing meaningful to write (the
