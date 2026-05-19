@@ -248,6 +248,50 @@ def test_catchup_channels_fetches_missed_messages(monkeypatch):
     assert fake_upsert.await_count == 3
 
 
+def test_catchup_resolves_entity_via_peerchannel(monkeypatch):
+    """Regression for 7h6: live.catchup_channels stored Channel.tg_chat_id
+    as a positive supergroup id (e.g. 1319248631) and used to pass it
+    straight to client.get_entity. Telethon interprets a bare positive
+    integer as a PeerUser user_id, so after a cold ingester restart
+    (empty in-memory entity cache) it raises "Could not find the input
+    entity for PeerUser". Wrapping in PeerChannel(positive_id) is
+    unambiguous and resolves via the session-stored access_hash.
+    """
+    from telethon.tl.types import PeerChannel
+    from ingester import live
+
+    fake_client = MagicMock()
+
+    async def gen():
+        return
+        yield  # generator with no yields
+
+    fake_client.get_entity = AsyncMock(return_value=MagicMock())
+    fake_client.iter_messages = MagicMock(return_value=gen())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    sf = _session_factory(session)
+
+    targets_result = MagicMock()
+    targets_result.all = MagicMock(return_value=[(7, 1319248631, 0)])
+    session.execute = AsyncMock(return_value=targets_result)
+
+    monkeypatch.setattr(live, "normalize_message", MagicMock())
+    monkeypatch.setattr(live, "upsert_post", AsyncMock(return_value=None))
+
+    asyncio.run(live.catchup_channels(
+        fake_client, sf, MagicMock(), bucket="media", settings=_S(), limit=10,
+    ))
+
+    fake_client.get_entity.assert_awaited_once()
+    arg = fake_client.get_entity.await_args.args[0]
+    assert isinstance(arg, PeerChannel), (
+        f"get_entity must receive PeerChannel, got {type(arg).__name__}: {arg!r}"
+    )
+    assert arg.channel_id == 1319248631
+
+
 def test_catchup_channels_downloads_photo_but_skips_video(monkeypatch):
     """Catchup downloads photos and sets their storage_key. Videos are
     intentionally NOT downloaded — the TMA renders a compact "open in

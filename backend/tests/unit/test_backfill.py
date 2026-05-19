@@ -103,7 +103,10 @@ def test_backfill_downloads_photo_for_existing_post_with_missing_storage_key(mon
 
     result = asyncio.run(run())
 
-    fake_client.get_entity.assert_awaited_once_with(-100)
+    # Channel.tg_chat_id is wrapped in PeerChannel before resolution (see 7h6).
+    from telethon.tl.types import PeerChannel as _PC
+    arg = fake_client.get_entity.await_args.args[0]
+    assert isinstance(arg, _PC) and arg.channel_id == -100
     fake_client.iter_messages.assert_called_once()
     fake_helper.assert_awaited_once()
     _, kwargs = fake_helper.call_args

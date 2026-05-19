@@ -64,7 +64,10 @@ def test_backfill_downloads_and_updates_channel():
                                                   downloader=fake_download))
 
     assert n == 1
-    fake_client.get_entity.assert_awaited_once_with(-100)
+    # Channel.tg_chat_id is wrapped in PeerChannel before resolution (see 7h6).
+    from telethon.tl.types import PeerChannel as _PC
+    arg = fake_client.get_entity.await_args.args[0]
+    assert isinstance(arg, _PC) and arg.channel_id == -100
     fake_download.assert_awaited_once()
     _, kwargs = fake_download.call_args
     assert kwargs.get("channel_id") == 7

@@ -20,6 +20,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from telethon import TelegramClient
+from telethon.tl.types import PeerChannel
 from minio import Minio
 
 from ingester.live import download_and_set_storage_keys
@@ -67,7 +68,9 @@ async def backfill_recent_media(
     total = 0
     for channel_id, tg_chat_id in targets:
         try:
-            entity = await client.get_entity(tg_chat_id)
+            # PeerChannel for unambiguous resolution after a cold restart;
+            # see ingester.live.catchup_channels for the full rationale (7h6).
+            entity = await client.get_entity(PeerChannel(tg_chat_id))
         except Exception as e:  # noqa: BLE001
             log.warning("backfill.get_entity_failed",
                         channel_id=channel_id, error=str(e))

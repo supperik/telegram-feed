@@ -23,6 +23,7 @@ import structlog
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from telethon import TelegramClient
+from telethon.tl.types import PeerChannel
 
 from shared.models import Channel, ChannelSubscription, Media, Post
 
@@ -70,7 +71,8 @@ async def merge_existing_albums(
     total_merged = 0
     for (channel_id, tg_chat_id), post_pairs in by_channel.items():
         try:
-            entity = await client.get_entity(tg_chat_id)
+            # PeerChannel for unambiguous resolution after a cold restart; see 7h6.
+            entity = await client.get_entity(PeerChannel(tg_chat_id))
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "merge_existing_albums.get_entity_failed",

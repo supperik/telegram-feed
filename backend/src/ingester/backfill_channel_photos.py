@@ -20,6 +20,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from telethon import TelegramClient
+from telethon.tl.types import PeerChannel
 from minio import Minio
 
 from ingester.photos import download_and_store_channel_photo
@@ -65,7 +66,8 @@ async def backfill_channel_photos(
     filled = 0
     for channel_id, tg_chat_id in rows:
         try:
-            entity = await client.get_entity(tg_chat_id)
+            # PeerChannel for unambiguous resolution after a cold restart; see 7h6.
+            entity = await client.get_entity(PeerChannel(tg_chat_id))
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "backfill_channel_photos.get_entity_failed",

@@ -17,6 +17,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from telethon import TelegramClient
+from telethon.tl.types import PeerChannel
 
 from ingester.text_html import entities_to_html
 from shared.models import Channel, ChannelSubscription, Post
@@ -60,7 +61,8 @@ async def backfill_text_html(
     total = 0
     for tg_chat_id, posts in by_channel.items():
         try:
-            entity = await client.get_entity(tg_chat_id)
+            # PeerChannel for unambiguous resolution after a cold restart; see 7h6.
+            entity = await client.get_entity(PeerChannel(tg_chat_id))
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "backfill_text_html.get_entity_failed",

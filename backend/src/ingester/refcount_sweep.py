@@ -6,6 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from telethon import TelegramClient
 from telethon.tl.functions.channels import LeaveChannelRequest
+from telethon.tl.types import PeerChannel
 
 from shared.models import Channel, ChannelSubscription
 
@@ -42,7 +43,8 @@ async def _sweep_once(
 
     for channel_id, tg_chat_id in targets:
         try:
-            entity = await client.get_entity(tg_chat_id)
+            # PeerChannel for unambiguous resolution after a cold restart; see 7h6.
+            entity = await client.get_entity(PeerChannel(tg_chat_id))
             await client(LeaveChannelRequest(entity))
         except Exception as e:  # noqa: BLE001
             log.warning("refcount_sweep.leave_failed",

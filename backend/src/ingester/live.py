@@ -308,7 +308,14 @@ async def catchup_channels(
 
     for channel_id, tg_chat_id, max_known in targets:
         try:
-            entity = await client.get_entity(tg_chat_id)
+            # Channel.tg_chat_id is the raw positive supergroup id.
+            # client.get_entity(positive_int) is parsed by Telethon as a
+            # PeerUser (user_id), which after a cold restart has no entry in
+            # the in-memory entity cache → "Could not find the input entity
+            # for PeerUser". PeerChannel(...) tells Telethon unambiguously
+            # this is a supergroup; the access_hash is pulled from the
+            # session file. See 7h6.
+            entity = await client.get_entity(PeerChannel(tg_chat_id))
         except Exception as e:  # noqa: BLE001
             log.warning("live.catchup_get_entity_failed",
                         channel_id=channel_id, error=str(e))

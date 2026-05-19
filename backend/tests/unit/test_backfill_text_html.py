@@ -71,7 +71,10 @@ def test_backfill_text_html_updates_post_using_telegram_entities():
 
     result = asyncio.run(mod.backfill_text_html(fake_client, sf))
 
-    fake_client.get_entity.assert_awaited_once_with(-100)
+    # Channel.tg_chat_id is wrapped in PeerChannel before resolution (see 7h6).
+    from telethon.tl.types import PeerChannel as _PC
+    arg = fake_client.get_entity.await_args.args[0]
+    assert isinstance(arg, _PC) and arg.channel_id == -100
     fake_client.get_messages.assert_awaited_once()
     # UPDATE was issued with the entities-derived HTML.
     update_call = session.execute.await_args_list[1]
