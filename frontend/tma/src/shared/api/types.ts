@@ -16,6 +16,13 @@ export interface ChannelSummary {
   is_private: boolean;
 }
 
+// Feed posts carry the raw Telegram peer id so the TMA can build a
+// t.me/c/<id>/<msg> deep link for private channels (sources endpoint
+// doesn't need this and keeps the slimmer ChannelSummary shape).
+export interface FeedChannel extends ChannelSummary {
+  tg_chat_id: number;
+}
+
 export interface FeedMedia {
   id: number;
   type: 'photo' | 'video' | 'document';
@@ -32,7 +39,7 @@ export interface FeedPost {
   text_html: string | null;
   views: number | null;
   forwards: number | null;
-  channel: ChannelSummary;
+  channel: FeedChannel;
   media: FeedMedia[];
   is_saved: boolean;
 }

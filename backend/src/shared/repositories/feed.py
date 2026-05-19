@@ -36,6 +36,7 @@ class FeedPostRow:
     views: int | None
     forwards: int | None
     channel_id: int
+    channel_tg_chat_id: int
     channel_username: str | None
     channel_title: str
     channel_photo_storage_key: str | None
@@ -74,6 +75,7 @@ async def fetch_feed_page(
             Post.views,
             Post.forwards,
             Channel.id.label("channel_id"),
+            Channel.tg_chat_id.label("channel_tg_chat_id"),
             Channel.username,
             Channel.title,
             Channel.photo_storage_key,
@@ -104,6 +106,7 @@ async def fetch_feed_page(
             views=r.views,
             forwards=r.forwards,
             channel_id=r.channel_id,
+            channel_tg_chat_id=r.channel_tg_chat_id,
             channel_username=r.username,
             channel_title=r.title,
             channel_photo_storage_key=r.photo_storage_key,

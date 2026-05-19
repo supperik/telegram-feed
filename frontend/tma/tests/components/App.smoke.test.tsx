@@ -42,7 +42,7 @@ describe('App smoke', () => {
               text_html: null,
               views: 3,
               forwards: 0,
-              channel: { id: 1, username: 'smoke', title: 'Smoke', photo_url: null, is_private: false },
+              channel: { id: 1, tg_chat_id: 1000001, username: 'smoke', title: 'Smoke', photo_url: null, is_private: false },
               media: [],
               is_saved: false,
             },

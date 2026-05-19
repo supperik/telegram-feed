@@ -43,6 +43,7 @@ async def test_feed_keyset_returns_newest_first_and_paginates(
     )
     assert [r.tg_message_id for r in page1] == [104, 103, 102]
     assert next(r for r in page1 if r.tg_message_id == 102).is_saved is True
+    assert all(r.channel_tg_chat_id == 70001 for r in page1)
 
     last = page1[-1]
     page2 = await fetch_feed_page(

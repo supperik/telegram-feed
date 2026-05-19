@@ -1,18 +1,16 @@
+import type { MouseEvent } from 'react';
+
 import { ChannelHeader } from '@/features/feed/ChannelHeader';
 import { MediaGallery } from '@/features/feed/MediaGallery';
 import { PostText } from '@/features/feed/PostText';
 import { HideButton } from '@/features/posts/HideButton';
 import { SaveButton } from '@/features/posts/SaveButton';
-import { EyeIcon, SendIcon, ShareIcon } from '@/shared/ui/icons';
 import type { FeedPost } from '@/shared/api/types';
+import { openTelegramLink, tgPostUrl } from '@/shared/lib/telegram';
+import { EyeIcon, SendIcon, ShareIcon } from '@/shared/ui/icons';
 
 interface Props {
   post: FeedPost;
-}
-
-function tgPostUrl(post: FeedPost): string | null {
-  if (!post.channel.username) return null;
-  return `tg://resolve?domain=${post.channel.username}&post=${post.tg_message_id}`;
 }
 
 function formatCount(n: number): string {
@@ -22,7 +20,11 @@ function formatCount(n: number): string {
 }
 
 export function PostCard({ post }: Props) {
-  const link = tgPostUrl(post);
+  const link = tgPostUrl(post.channel, post.tg_message_id);
+  const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    openTelegramLink(link);
+  };
   return (
     <article className="mx-3 mb-3 overflow-hidden rounded-2xl bg-secondary shadow-card">
       <ChannelHeader channel={post.channel} postedAt={post.posted_at} />
@@ -43,15 +45,14 @@ export function PostCard({ post }: Props) {
         ) : null}
         <SaveButton postId={post.id} isSaved={post.is_saved} />
         <HideButton postId={post.id} />
-        {link ? (
-          <a
-            href={link}
-            aria-label="Open in Telegram"
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-link active:bg-link-soft"
-          >
-            <SendIcon size={18} />
-          </a>
-        ) : null}
+        <a
+          href={link}
+          onClick={onOpen}
+          aria-label="Open in Telegram"
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-link active:bg-link-soft"
+        >
+          <SendIcon size={18} />
+        </a>
       </footer>
     </article>
   );

@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 
 import { getTokens } from '@/features/auth/tokenStore';
 import { MediaLightbox } from '@/features/feed/MediaLightbox';
-import type { ChannelSummary, FeedMedia } from '@/shared/api/types';
+import type { FeedChannel, FeedMedia } from '@/shared/api/types';
+import { openTelegramLink, tgPostUrl } from '@/shared/lib/telegram';
 
 interface Props {
   media: FeedMedia[];
-  channel: ChannelSummary;
+  channel: FeedChannel;
   tgMessageId: number;
 }
 
@@ -19,9 +20,6 @@ function mediaUrl(id: number): string {
     ? `${BASE}/media/${id}?token=${encodeURIComponent(tokens.access_token)}`
     : `${BASE}/media/${id}`;
 }
-
-const tgPostUrl = (channel: ChannelSummary, msgId: number): string | null =>
-  channel.username ? `tg://resolve?domain=${channel.username}&post=${msgId}` : null;
 
 type Variant = 'one' | 'two' | 'three' | 'four' | 'five';
 
@@ -43,7 +41,7 @@ const VARIANT_CLASSES: Record<Variant, string> = {
 
 interface TileProps {
   m: FeedMedia;
-  channel: ChannelSummary;
+  channel: FeedChannel;
   tgMessageId: number;
   overlay?: string | null;
   onOpenPhoto?: () => void;
@@ -77,25 +75,26 @@ function Tile({ m, channel, tgMessageId, overlay, onOpenPhoto }: TileProps) {
     // inside the TMA isn't possible yet — tap takes the user straight to
     // the Telegram client where the video plays natively.
     const link = tgPostUrl(channel, tgMessageId);
-    const content = (
-      <div className="relative h-full w-full overflow-hidden bg-black/5">
-        <img src={mediaUrl(m.id)} alt="" loading="lazy" className="h-full w-full object-cover" />
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/15">
-          <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
-            ▶ {m.duration ? `${m.duration}s` : 'Video'}
-          </span>
-        </div>
-        {overlay ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-semibold text-white">
-            {overlay}
+    const onOpen = (e: MouseEvent<HTMLAnchorElement>) => {
+      e.preventDefault();
+      openTelegramLink(link);
+    };
+    return (
+      <a href={link} onClick={onOpen} className="block h-full w-full">
+        <div className="relative h-full w-full overflow-hidden bg-black/5">
+          <img src={mediaUrl(m.id)} alt="" loading="lazy" className="h-full w-full object-cover" />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/15">
+            <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
+              ▶ {m.duration ? `${m.duration}s` : 'Video'}
+            </span>
           </div>
-        ) : null}
-      </div>
-    );
-    return link ? (
-      <a href={link} className="block h-full w-full">{content}</a>
-    ) : (
-      content
+          {overlay ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-semibold text-white">
+              {overlay}
+            </div>
+          ) : null}
+        </div>
+      </a>
     );
   }
   return (

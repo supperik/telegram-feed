@@ -53,6 +53,7 @@ async def get_feed(
             forwards=row.forwards,
             channel=FeedChannel(
                 id=row.channel_id,
+                tg_chat_id=row.channel_tg_chat_id,
                 username=row.channel_username,
                 title=row.channel_title,
                 photo_url=channel_photo_url(row.channel_id, row.channel_photo_storage_key),

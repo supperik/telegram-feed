@@ -36,6 +36,9 @@ async def test_feed_returns_first_page_with_cursor(
     assert len(body["posts"]) == 2
     assert body["posts"][0]["tg_message_id"] == 4
     assert body["posts"][1]["tg_message_id"] == 3
+    # tg_chat_id is required by the TMA to build t.me/c/<id>/<msg> deep links
+    # for private channels (no username); we surface it on every feed post.
+    assert body["posts"][0]["channel"]["tg_chat_id"] == 80001
     assert body["next_cursor"] is not None
 
     r2 = await async_client.get(

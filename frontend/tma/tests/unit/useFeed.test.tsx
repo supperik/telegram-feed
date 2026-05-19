@@ -22,7 +22,7 @@ describe('useFeed', () => {
             {
               id: 1, tg_message_id: 10, posted_at: '2026-01-01T00:00:00Z',
               text: 'hello', text_html: null, views: null, forwards: null,
-              channel: { id: 1, username: 'c', title: 'C', photo_url: null, is_private: false },
+              channel: { id: 1, tg_chat_id: 1000001, username: 'c', title: 'C', photo_url: null, is_private: false },
               media: [], is_saved: false,
             },
           ],

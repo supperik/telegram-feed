@@ -14,6 +14,7 @@ class FeedMedia(BaseModel):
 
 class FeedChannel(BaseModel):
     id: int
+    tg_chat_id: int
     username: str | None
     title: str
     photo_url: str | None

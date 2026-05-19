@@ -1,9 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MediaGallery } from '@/features/feed/MediaGallery';
-import type { ChannelSummary, FeedMedia } from '@/shared/api/types';
+import type { FeedChannel, FeedMedia } from '@/shared/api/types';
 
-const channel: ChannelSummary = { id: 1, username: 'meduza', title: 'M', photo_url: null, is_private: false };
+const channel: FeedChannel = {
+  id: 1,
+  tg_chat_id: 1319248631,
+  username: 'meduza',
+  title: 'M',
+  photo_url: null,
+  is_private: false,
+};
 
 function makePhotos(n: number): FeedMedia[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -47,15 +54,25 @@ describe('MediaGallery', () => {
     expect(screen.getByText(/▶/)).toBeInTheDocument();
   });
 
-  it('video tile is a tg:// link, not a lightbox trigger', () => {
+  it('video tile is a t.me link to the post, not a lightbox trigger', () => {
     // Bytes for video aren't stored on the backend, so we don't try to
     // play it inside the lightbox — tapping a video tile goes straight
     // to Telegram instead. Lightbox is photos-only.
     const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
     const { container } = render(<MediaGallery media={media} channel={channel} tgMessageId={42} />);
-    const a = container.querySelector('a[href^="tg://"]');
+    const a = container.querySelector('a[href^="https://t.me/"]');
     expect(a).not.toBeNull();
-    expect(a?.getAttribute('href')).toBe('tg://resolve?domain=meduza&post=42');
+    expect(a?.getAttribute('href')).toBe('https://t.me/meduza/42');
+  });
+
+  it('video tile in a private channel links via t.me/c/<tg_chat_id>/<msg>', () => {
+    const privateChannel: FeedChannel = { ...channel, username: null, is_private: true };
+    const media: FeedMedia[] = [{ id: 1, type: 'video', width: 800, height: 600, duration: 30 }];
+    const { container } = render(
+      <MediaGallery media={media} channel={privateChannel} tgMessageId={42} />,
+    );
+    const a = container.querySelector('a[href^="https://t.me/c/"]');
+    expect(a?.getAttribute('href')).toBe('https://t.me/c/1319248631/42');
   });
 });
 
