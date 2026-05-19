@@ -7,7 +7,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import Channel, ChannelSubscription, UserSource
+from shared.models import (
+    Channel,
+    ChannelSubscription,
+    UserCatalogHiddenChannel,
+    UserSource,
+)
 from shared.repositories.channels import decrement_ref_count, increment_ref_count
 
 
@@ -37,6 +42,12 @@ async def add_user_source(
         sub = await increment_ref_count(session, channel_id=channel_id)
     else:
         sub = await session.get(ChannelSubscription, channel_id)
+    await session.execute(
+        delete(UserCatalogHiddenChannel).where(
+            UserCatalogHiddenChannel.user_id == user_id,
+            UserCatalogHiddenChannel.channel_id == channel_id,
+        )
+    )
     return was_new, (sub.status if sub else "unknown")
 
 
