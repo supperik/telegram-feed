@@ -17,7 +17,7 @@ from api.schemas.sources import (
     SourceList,
     SourceListItem,
 )
-from shared.models import Channel, ChannelJoinQueue, User
+from shared.models import Channel, ChannelJoinQueue, ChannelSubscription, User
 from shared.repositories.user_sources import (
     add_user_source,
     list_user_sources,
@@ -154,6 +154,41 @@ async def queue_status(
         error_code=qrow.error_code,
         error_reason=qrow.error_reason,
         channel=channel,
+    )
+
+
+@router.post("/{channel_id}", response_model=AddSourceOut)
+async def subscribe_by_channel_id(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AddSourceOut:
+    ch = await db.get(Channel, channel_id)
+    if ch is None:
+        raise APIError(
+            code="channel_not_found", message="Channel not found", status_code=404
+        )
+    if ch.banned:
+        raise APIError(
+            code="channel_banned", message="Channel is banned", status_code=403
+        )
+    sub = await db.get(ChannelSubscription, channel_id)
+    if sub is None or sub.status != "active":
+        raise APIError(
+            code="channel_not_available",
+            message="Channel is not available for subscription",
+            status_code=404,
+        )
+    await add_user_source(db, user_id=user.id, channel_id=channel_id)
+    await db.commit()
+    return AddSourceOut(
+        status="subscribed",
+        channel=ChannelSummary(
+            id=ch.id,
+            username=ch.username,
+            title=ch.title,
+            photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
+        ),
     )
 
 
