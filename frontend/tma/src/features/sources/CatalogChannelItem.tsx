@@ -19,17 +19,8 @@ interface HiddenProps {
 
 type Props = AvailableProps | HiddenProps;
 
-function pluralSubscribers(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return 'подписчик';
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'подписчика';
-  return 'подписчиков';
-}
-
 export function CatalogChannelItem(props: Props) {
   const c = props.item.channel;
-  const subs = props.item.subscribers_count;
   return (
     <li className="flex items-center gap-3 border-b border-black/10 px-3 py-2.5 last:border-b-0">
       <Avatar photoUrl={c.photo_url} title={c.title} size={40} />
@@ -45,7 +36,6 @@ export function CatalogChannelItem(props: Props) {
           ) : (
             '—'
           )}
-          {subs > 1 ? ` · ${subs} ${pluralSubscribers(subs)}` : null}
         </div>
       </div>
       {props.actions === 'available' ? (
