@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../shared/api/client";
 import type { Stats } from "../../shared/api/types";
+import { formatMskSeconds } from "../../shared/format/datetime";
 
 function Card({ label, value }: { label: string; value: string | number }) {
   return (
@@ -31,7 +32,7 @@ export function StatsScreen() {
         <Card label="Posts" value={data.posts_count} />
         <Card
           label="Last post"
-          value={data.last_post_at?.replace("T", " ").slice(0, 19) ?? "—"}
+          value={formatMskSeconds(data.last_post_at)}
         />
       </div>
     </div>

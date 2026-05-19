@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { useState } from "react";
 import { apiClient } from "../../shared/api/client";
 import type { Channel, ChannelsListResponse } from "../../shared/api/types";
+import { formatMskMinutes } from "../../shared/format/datetime";
 import { Button } from "../../shared/ui/Button";
 import { Input } from "../../shared/ui/Input";
 import { Table, Th, Td } from "../../shared/ui/Table";
@@ -86,9 +87,7 @@ export function ChannelsScreen() {
                 <Td>{c.title}</Td>
                 <Td>{c.posts_count}</Td>
                 <Td>{c.ref_count}</Td>
-                <Td>
-                  {c.last_post_at?.slice(0, 16).replace("T", " ") ?? "—"}
-                </Td>
+                <Td>{formatMskMinutes(c.last_post_at)}</Td>
                 <Td>
                   {c.banned ? (
                     <span title={c.banned_reason ?? undefined}>

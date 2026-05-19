@@ -2,6 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiClient } from "../../shared/api/client";
 import type { AdminActionsListResponse } from "../../shared/api/types";
+import { formatMskSeconds } from "../../shared/format/datetime";
 import { Input } from "../../shared/ui/Input";
 import { Button } from "../../shared/ui/Button";
 import { Table, Th, Td } from "../../shared/ui/Table";
@@ -53,7 +54,7 @@ export function AuditScreen() {
             {rows.map((a) => (
               <tr key={a.id}>
                 <Td>{a.id}</Td>
-                <Td>{a.created_at.replace("T", " ").slice(0, 19)}</Td>
+                <Td>{formatMskSeconds(a.created_at)}</Td>
                 <Td>{a.admin_email ?? `#${a.admin_id}`}</Td>
                 <Td>
                   <code className="text-xs">{a.action}</code>
