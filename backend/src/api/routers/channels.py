@@ -8,17 +8,25 @@ the same auth wrapper for both.
 """
 from __future__ import annotations
 
-from typing import Iterator
+from typing import Iterator, Literal
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_db, get_settings
+from api.channel_photo import channel_photo_url
+from api.deps import get_current_user, get_db, get_settings
 from api.errors import APIError
+from api.pagination import CatalogCursor
+from api.schemas.channels import CatalogChannelItem, CatalogPage
+from api.schemas.sources import ChannelSummary
 from shared.auth.jwt import decode_access
 from shared.config import Settings
 from shared.models import Channel, User
+from shared.repositories.channel_catalog import (
+    list_catalog_available,
+    list_catalog_hidden,
+)
 from shared.storage import make_storage_client
 
 
@@ -45,6 +53,71 @@ async def _get_user_for_channel_photo(
     if user is None:
         raise APIError(code="unauthenticated", message="User no longer exists", status_code=401)
     return user
+
+
+@router.get("/catalog", response_model=CatalogPage)
+async def get_catalog(
+    view: Literal["available", "hidden"] = Query(default="available"),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=128),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CatalogPage:
+    if cursor is None:
+        cursor_obj = (
+            CatalogCursor.initial_available()
+            if view == "available"
+            else CatalogCursor.initial_hidden()
+        )
+    else:
+        cursor_obj = CatalogCursor.decode(cursor)
+        if cursor_obj.view != view:
+            raise APIError(
+                code="bad_cursor",
+                message="Cursor view does not match request",
+                status_code=400,
+            )
+
+    if view == "available":
+        rows = await list_catalog_available(
+            db, user_id=user.id, cursor=cursor_obj, limit=limit, q=q,
+        )
+    else:
+        rows = await list_catalog_hidden(
+            db, user_id=user.id, cursor=cursor_obj, limit=limit, q=q,
+        )
+
+    items = [
+        CatalogChannelItem(
+            channel=ChannelSummary(
+                id=r.channel_id,
+                username=r.username,
+                title=r.title,
+                photo_url=channel_photo_url(r.channel_id, r.photo_storage_key),
+            ),
+            subscribers_count=r.subscribers_count,
+            last_post_at=r.last_post_at,
+            is_subscribed=r.is_subscribed,
+            is_hidden_from_catalog=r.is_hidden_from_catalog,
+        )
+        for r in rows
+    ]
+
+    next_cursor: str | None = None
+    if len(rows) == limit:
+        last = rows[-1]
+        if view == "available":
+            next_cursor = CatalogCursor.available(
+                posts_count=last.posts_count, channel_id=last.channel_id,
+            ).encode()
+        else:
+            assert last.hidden_at is not None
+            next_cursor = CatalogCursor.hidden(
+                hidden_at=last.hidden_at, channel_id=last.channel_id,
+            ).encode()
+
+    return CatalogPage(items=items, next_cursor=next_cursor)
 
 
 @router.get("/{channel_id}/photo")
