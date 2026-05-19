@@ -5,15 +5,19 @@ import { MediaGallery } from '@/features/feed/MediaGallery';
 import { PostText } from '@/features/feed/PostText';
 import { HideButton } from '@/features/posts/HideButton';
 import { SaveButton } from '@/features/posts/SaveButton';
+import { UnhideButton } from '@/features/posts/UnhideButton';
 import type { FeedPost } from '@/shared/api/types';
 import { openTelegramLink, tgPostUrl } from '@/shared/lib/telegram';
 import { SendIcon } from '@/shared/ui/icons';
 
+export type PostCardActions = 'feed' | 'saved' | 'hidden';
+
 interface Props {
   post: FeedPost;
+  actions?: PostCardActions;
 }
 
-export function PostCard({ post }: Props) {
+export function PostCard({ post, actions = 'feed' }: Props) {
   // For private channels with an invite link, the Telegram button leads to
   // the invite (a non-member can join; an already-member is taken to the
   // channel). For everything else it deep-links to the post itself.
@@ -29,7 +33,11 @@ export function PostCard({ post }: Props) {
       <MediaGallery media={post.media} channel={post.channel} tgMessageId={post.tg_message_id} />
       <footer className="flex flex-wrap items-center gap-0.5 px-1.5 pb-2 pt-1">
         <SaveButton postId={post.id} isSaved={post.is_saved} />
-        <HideButton postId={post.id} />
+        {actions === 'hidden' ? (
+          <UnhideButton postId={post.id} />
+        ) : (
+          <HideButton postId={post.id} />
+        )}
         <a
           href={link}
           onClick={onOpen}
