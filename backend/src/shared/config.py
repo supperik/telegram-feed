@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "json"
     env: Literal["local", "test", "staging", "prod"] = "local"
 
+    # Approval poller (request-to-join channels)
+    approval_timeout_days: int = 7
+    approval_poll_interval_s: float = 1800.0
+
     @property
     def postgres_dsn(self) -> str:
         return (

@@ -3,6 +3,7 @@ import signal
 
 import structlog
 
+from ingester.approval_poller import run_approval_poller
 from ingester.backfill import backfill_recent_media
 from ingester.backfill_channel_photos import backfill_channel_photos
 from ingester.backfill_text_html import backfill_text_html
@@ -99,6 +100,12 @@ async def main() -> None:
                 client, session_factory,
                 minio_client=minio_client, bucket=settings.minio_bucket,
                 chat_map=chat_map,
+            ),
+            run_approval_poller(
+                client, session_factory,
+                minio_client=minio_client, bucket=settings.minio_bucket,
+                poll_interval_s=settings.approval_poll_interval_s,
+                timeout_days=settings.approval_timeout_days,
             ),
             run_refcount_sweep(client, session_factory),
             run_forever(),

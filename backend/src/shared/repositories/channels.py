@@ -12,7 +12,7 @@ async def upsert_channel(
     username: str | None,
     title: str,
     description: str | None = None,
-    photo_url: str | None = None,
+    photo_storage_key: str | None = None,
 ) -> Channel:
     """Insert a channel if absent, else return the existing row unchanged.
 
@@ -26,7 +26,7 @@ async def upsert_channel(
             username=username,
             title=title,
             description=description,
-            photo_url=photo_url,
+            photo_storage_key=photo_storage_key,
         )
         .on_conflict_do_nothing(index_elements=[Channel.tg_chat_id])
         .returning(Channel.id)

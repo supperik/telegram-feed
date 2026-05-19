@@ -20,7 +20,7 @@ const post: FeedPost = {
   text_html: null,
   views: 100,
   forwards: 1,
-  channel: { id: 1, username: 'meduza', title: 'Meduza', photo_url: null },
+  channel: { id: 1, username: 'meduza', title: 'Meduza', photo_url: null, is_private: false },
   media: [],
   is_saved: false,
 };

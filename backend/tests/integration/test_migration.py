@@ -39,4 +39,18 @@ def test_alembic_upgrade_head(pg_container):
         text=True,
     )
     assert again.returncode == 0, again.stderr
-    assert "0001" in again.stdout
+    # After upgrade head, `alembic current` should report a revision tagged as (head).
+    assert "(head)" in again.stdout, again.stdout
+
+    heads = subprocess.run(
+        [sys.executable, "-m", "alembic", "heads"],
+        cwd=backend_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert heads.returncode == 0, heads.stderr
+    head_revision = heads.stdout.strip().split()[0]
+    assert head_revision in again.stdout, (
+        f"alembic current ({again.stdout!r}) does not match head ({head_revision!r})"
+    )

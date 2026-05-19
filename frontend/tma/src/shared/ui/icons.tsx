@@ -4,7 +4,7 @@ interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> {
   size?: number;
 }
 
-function makeIcon(path: React.ReactNode, viewBox = '0 0 24 24') {
+function makeIcon(path: React.ReactNode, viewBox = '0 0 24 24', dataIcon?: string) {
   return function Icon({ size = 24, className, ...rest }: IconProps) {
     return (
       <svg
@@ -18,6 +18,7 @@ function makeIcon(path: React.ReactNode, viewBox = '0 0 24 24') {
         strokeLinejoin="round"
         className={className}
         aria-hidden="true"
+        data-icon={dataIcon}
         {...rest}
       >
         {path}
@@ -88,4 +89,12 @@ export const AlertCircleIcon = makeIcon(
     <line x1="12" y1="8" x2="12" y2="13" />
     <line x1="12" y1="16" x2="12.01" y2="16" />
   </>,
+);
+export const LockIcon = makeIcon(
+  <>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </>,
+  '0 0 24 24',
+  'lock',
 );

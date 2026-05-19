@@ -3,7 +3,7 @@ import { useRemoveSource } from '@/features/sources/useSources';
 import { Avatar } from '@/shared/ui/Avatar';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { IconButton } from '@/shared/ui/IconButton';
-import { EyeOffIcon, TrashIcon } from '@/shared/ui/icons';
+import { EyeOffIcon, LockIcon, TrashIcon } from '@/shared/ui/icons';
 import type { SourceListItem as Item } from '@/shared/api/types';
 
 interface Props {
@@ -29,7 +29,15 @@ export function SourceListItem({ item }: Props) {
       <div className="min-w-0 flex-1 leading-tight">
         <div className="truncate text-[14.5px] font-semibold">{c.title}</div>
         <div className={`mt-0.5 truncate text-xs ${pending ? 'text-[#b45309]' : 'text-hint'}`}>
-          {c.username ? `@${c.username}` : '—'}
+          {c.is_private ? (
+            <span className="inline-flex items-center gap-1">
+              <LockIcon size={12} /> Приватный
+            </span>
+          ) : c.username ? (
+            `@${c.username}`
+          ) : (
+            '—'
+          )}
           {pending ? ' · подгружаем…' : null}
         </div>
       </div>
