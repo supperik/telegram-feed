@@ -26,7 +26,7 @@ export function SourcesScreen() {
       <header className="px-4 pb-1 pt-3">
         <h1 className="text-2xl font-bold tracking-tight">Источники</h1>
         <div className="mt-0.5 text-xs text-hint">
-          {totalCount === 0 ? 'пока пусто' : `${totalCount} ${pluralChannels(totalCount)}`}
+          {visibleCount === 0 ? 'пока пусто' : `${visibleCount} ${pluralChannels(visibleCount)}`}
         </div>
       </header>
 
