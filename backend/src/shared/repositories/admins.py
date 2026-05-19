@@ -12,12 +12,12 @@ from shared.models import Channel, ChannelSubscription, Post
 MAX_CHANNELS_LIMIT = 200
 
 SortField = Literal[
-    "id", "username", "posts_count", "ref_count", "last_post_at", "banned"
+    "id", "username", "posts_count", "ref_count", "last_post_at", "banned", "hidden"
 ]
 SortOrder = Literal["asc", "desc"]
 
 SORTABLE_FIELDS: tuple[str, ...] = (
-    "id", "username", "posts_count", "ref_count", "last_post_at", "banned",
+    "id", "username", "posts_count", "ref_count", "last_post_at", "banned", "hidden",
 )
 DEFAULT_SORT: SortField = "last_post_at"
 DEFAULT_ORDER: SortOrder = "desc"
@@ -56,6 +56,7 @@ def _admin_channel_select():
             posts_count_col.label("posts_count"),
             Channel.banned,
             Channel.banned_reason,
+            Channel.hidden,
             last_post_col.label("last_post_at"),
             Channel.created_at,
             ref_count_col.label("ref_count"),
@@ -71,6 +72,7 @@ def _admin_channel_select():
         "ref_count": ref_count_col,
         "last_post_at": last_post_col,
         "banned": Channel.banned,
+        "hidden": Channel.hidden,
     }
     return stmt, sortable_cols
 
@@ -90,7 +92,7 @@ def _decode_sort_value(raw: Any, sort: str) -> Any:
         return None
     if sort == "last_post_at":
         return datetime.fromisoformat(raw)
-    if sort == "banned":
+    if sort in ("banned", "hidden"):
         return bool(raw)
     return raw
 
@@ -257,6 +259,28 @@ async def unban_channel(session: AsyncSession, channel_id: int) -> Channel | Non
         update(Channel)
         .where(Channel.id == channel_id)
         .values(banned=False, banned_reason=None)
+        .returning(Channel)
+        .execution_options(populate_existing=True)
+    )
+    return res.scalar_one_or_none()
+
+
+async def hide_channel(session: AsyncSession, channel_id: int) -> Channel | None:
+    res = await session.execute(
+        update(Channel)
+        .where(Channel.id == channel_id)
+        .values(hidden=True)
+        .returning(Channel)
+        .execution_options(populate_existing=True)
+    )
+    return res.scalar_one_or_none()
+
+
+async def unhide_channel(session: AsyncSession, channel_id: int) -> Channel | None:
+    res = await session.execute(
+        update(Channel)
+        .where(Channel.id == channel_id)
+        .values(hidden=False)
         .returning(Channel)
         .execution_options(populate_existing=True)
     )

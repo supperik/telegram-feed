@@ -25,6 +25,7 @@ const SAMPLE_CHANNELS: Channel[] = [
     ref_count: 3,
     banned: false,
     banned_reason: null,
+    hidden: false,
     last_post_at: "2025-01-01T12:00:00",
     created_at: "2024-12-01T00:00:00",
   },
@@ -39,6 +40,7 @@ const SAMPLE_CHANNELS: Channel[] = [
     ref_count: 1,
     banned: true,
     banned_reason: "spam",
+    hidden: false,
     last_post_at: null,
     created_at: "2024-12-15T00:00:00",
   },
@@ -133,6 +135,42 @@ describe("ChannelsScreen", () => {
         expect.objectContaining({
           params: expect.objectContaining({ sort: "posts_count", order: "asc" }),
         }),
+      );
+    });
+  });
+
+  it("clicking Hide posts to /hide and clicking Unhide on a hidden row posts to /unhide", async () => {
+    const user = userEvent.setup();
+    const hiddenSample: Channel[] = [
+      SAMPLE_CHANNELS[0],
+      { ...SAMPLE_CHANNELS[0], id: 3, username: "gamma", title: "Gamma", hidden: true },
+    ];
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { channels: hiddenSample, next_cursor: null },
+    });
+    vi.mocked(apiClient.post)
+      .mockResolvedValueOnce({ data: { ...hiddenSample[0], hidden: true } })
+      .mockResolvedValueOnce({ data: { ...hiddenSample[1], hidden: false } });
+
+    renderWithClient(<ChannelsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText("Alpha")).toBeInTheDocument();
+    });
+
+    // Row 1 (alpha, hidden=false) exposes Hide; row 2 (gamma, hidden=true) exposes Unhide.
+    await user.click(screen.getByRole("button", { name: /^Hide$/ }));
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith(
+        "/admin/channels/1/hide",
+        {},
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /^Unhide$/ }));
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith(
+        "/admin/channels/3/unhide",
+        {},
       );
     });
   });

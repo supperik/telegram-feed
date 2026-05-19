@@ -21,6 +21,7 @@ export type Channel = {
   ref_count: number;
   banned: boolean;
   banned_reason: string | null;
+  hidden: boolean;
   last_post_at: string | null;
   created_at: string;
 };

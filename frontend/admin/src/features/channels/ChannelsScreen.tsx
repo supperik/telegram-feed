@@ -14,7 +14,8 @@ type SortField =
   | "posts_count"
   | "ref_count"
   | "last_post_at"
-  | "banned";
+  | "banned"
+  | "hidden";
 type SortOrder = "asc" | "desc";
 
 function SortableTh({
@@ -104,6 +105,28 @@ export function ChannelsScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "channels"] }),
   });
 
+  const hideMut = useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await apiClient.post<Channel>(
+        `/admin/channels/${id}/hide`,
+        {},
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "channels"] }),
+  });
+
+  const unhideMut = useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await apiClient.post<Channel>(
+        `/admin/channels/${id}/unhide`,
+        {},
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "channels"] }),
+  });
+
   const rows = query.data?.pages.flatMap((p) => p.channels) ?? [];
 
   const onSortChange = ({
@@ -152,12 +175,20 @@ export function ChannelsScreen() {
               <SortableTh field="banned" currentSort={sort} currentOrder={order} onChange={onSortChange}>
                 Banned
               </SortableTh>
-              <Th>Action</Th>
+              <SortableTh field="hidden" currentSort={sort} currentOrder={order} onChange={onSortChange}>
+                Hidden
+              </SortableTh>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.id} className={c.banned ? "bg-red-50" : ""}>
+              <tr
+                key={c.id}
+                className={
+                  c.banned ? "bg-red-50" : c.hidden ? "bg-amber-50" : ""
+                }
+              >
                 <Td>{c.id}</Td>
                 <Td>{c.username ?? "—"}</Td>
                 <Td>{c.title}</Td>
@@ -173,24 +204,44 @@ export function ChannelsScreen() {
                     "—"
                   )}
                 </Td>
+                <Td>{c.hidden ? "🙈 hidden" : "—"}</Td>
                 <Td>
-                  {c.banned ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => unbanMut.mutate(c.id)}
-                      disabled={unbanMut.isPending}
-                    >
-                      Unban
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="danger"
-                      onClick={() => setBanning(c)}
-                      disabled={banMut.isPending}
-                    >
-                      Ban
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {c.hidden ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => unhideMut.mutate(c.id)}
+                        disabled={unhideMut.isPending}
+                      >
+                        Unhide
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        onClick={() => hideMut.mutate(c.id)}
+                        disabled={hideMut.isPending}
+                      >
+                        Hide
+                      </Button>
+                    )}
+                    {c.banned ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => unbanMut.mutate(c.id)}
+                        disabled={unbanMut.isPending}
+                      >
+                        Unban
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        onClick={() => setBanning(c)}
+                        disabled={banMut.isPending}
+                      >
+                        Ban
+                      </Button>
+                    )}
+                  </div>
                 </Td>
               </tr>
             ))}

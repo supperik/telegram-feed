@@ -221,6 +221,60 @@ async def test_list_available_q_filter_treats_wildcards_as_literals(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_list_available_excludes_globally_hidden_when_q_is_none(
+    db_session, seed_user
+) -> None:
+    """Channels with channel.hidden=True are excluded from free browsing."""
+    uid = await seed_user(tg_user_id=113)
+    visible = Channel(tg_chat_id=9501, username="cat_v", title="V", posts_count=10)
+    hidden = Channel(
+        tg_chat_id=9502, username="cat_h", title="H", posts_count=20, hidden=True,
+    )
+    db_session.add_all([visible, hidden])
+    await db_session.commit()
+    for c in (visible, hidden):
+        db_session.add(ChannelSubscription(channel_id=c.id, status="active", ref_count=1))
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        q=None,
+    )
+    assert [r.channel_id for r in rows] == [visible.id]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_includes_globally_hidden_on_search(
+    db_session, seed_user
+) -> None:
+    """Search (q is set) bypasses the moderation hidden filter so users can
+    still locate a channel they know the name of."""
+    uid = await seed_user(tg_user_id=114)
+    hidden = Channel(
+        tg_chat_id=9601, username="cat_searchme", title="SearchMe",
+        posts_count=10, hidden=True,
+    )
+    db_session.add(hidden)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=hidden.id, status="active", ref_count=1))
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        q="searchme",
+    )
+    assert [r.channel_id for r in rows] == [hidden.id]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_hide_unhide_round_trip_idempotent(db_session, seed_user) -> None:
     uid = await seed_user(tg_user_id=110)
     ch = Channel(tg_chat_id=6001, username="cat_z", title="Z", posts_count=1)

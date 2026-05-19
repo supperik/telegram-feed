@@ -18,6 +18,7 @@ class Channel(Base):
     posts_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     banned_reason: Mapped[str | None] = mapped_column(Text)
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_post_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     invite_hash: Mapped[str | None] = mapped_column(String(128))

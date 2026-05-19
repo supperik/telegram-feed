@@ -83,6 +83,10 @@ async def list_catalog_available(
     q_filter = _q_filter(q)
     if q_filter is not None:
         stmt = stmt.where(q_filter)
+    else:
+        # Free browsing of the catalog excludes channels hidden by moderation.
+        # When the user is searching (q is set) hidden channels remain findable.
+        stmt = stmt.where(Channel.hidden.is_(False))
 
     res = await session.execute(stmt)
     return [

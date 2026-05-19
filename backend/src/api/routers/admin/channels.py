@@ -14,8 +14,10 @@ from shared.repositories.admins import (
     ban_channel,
     get_channel_or_none,
     get_channel_row_for_admin,
+    hide_channel,
     list_channels_for_admin,
     unban_channel,
+    unhide_channel,
 )
 from shared.repositories.audit import append_admin_action
 
@@ -34,6 +36,7 @@ class ChannelOut(BaseModel):
     ref_count: int
     banned: bool
     banned_reason: str | None
+    hidden: bool
     last_post_at: datetime | None
     created_at: datetime
 
@@ -99,6 +102,7 @@ def _channel_out_from_row(r: dict) -> "ChannelOut":
         ref_count=r["ref_count"],
         banned=r["banned"],
         banned_reason=r["banned_reason"],
+        hidden=r["hidden"],
         last_post_at=r["last_post_at"],
         created_at=r["created_at"],
     )
@@ -145,6 +149,54 @@ async def unban_channel_endpoint(
     await append_admin_action(
         db, admin_id=admin.id,
         action="unban_channel",
+        target={"channel_id": channel_id},
+    )
+    await db.commit()
+    row = await get_channel_row_for_admin(db, channel_id)
+    if row is None:
+        raise _not_found()
+    return _channel_out_from_row(row)
+
+
+@router.post("/{channel_id}/hide", response_model=ChannelOut)
+async def hide_channel_endpoint(
+    channel_id: int,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelOut:
+    existing = await get_channel_or_none(db, channel_id)
+    if existing is None:
+        raise _not_found()
+    updated = await hide_channel(db, channel_id)
+    if updated is None:
+        raise _not_found()
+    await append_admin_action(
+        db, admin_id=admin.id,
+        action="hide_channel",
+        target={"channel_id": channel_id},
+    )
+    await db.commit()
+    row = await get_channel_row_for_admin(db, channel_id)
+    if row is None:
+        raise _not_found()
+    return _channel_out_from_row(row)
+
+
+@router.post("/{channel_id}/unhide", response_model=ChannelOut)
+async def unhide_channel_endpoint(
+    channel_id: int,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelOut:
+    existing = await get_channel_or_none(db, channel_id)
+    if existing is None:
+        raise _not_found()
+    updated = await unhide_channel(db, channel_id)
+    if updated is None:
+        raise _not_found()
+    await append_admin_action(
+        db, admin_id=admin.id,
+        action="unhide_channel",
         target={"channel_id": channel_id},
     )
     await db.commit()

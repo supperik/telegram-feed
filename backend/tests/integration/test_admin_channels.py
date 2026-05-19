@@ -300,6 +300,124 @@ def test_ban_404_for_unknown_channel(configured_env, admin_record):
 
 
 @pytest.mark.integration
+def test_hide_channel_writes_hidden_and_audit(configured_env, admin_record, channels):
+    from sqlalchemy import select
+    from shared.config import get_settings
+    from shared.db import make_engine, make_session_factory
+    from shared.models import AdminAction
+    from api.main import app
+
+    target = next(c for c in channels if c["title"].endswith("#2"))  # not pre-banned
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        r = client.post(
+            f"/admin/channels/{target['id']}/hide",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["hidden"] is True
+
+        # Idempotent — hiding again still succeeds and writes a fresh audit row.
+        r2 = client.post(
+            f"/admin/channels/{target['id']}/hide",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r2.status_code == 200
+        assert r2.json()["hidden"] is True
+
+    async def fetch():
+        get_settings.cache_clear()
+        engine = make_engine(get_settings().postgres_dsn)
+        sf = make_session_factory(engine)
+        async with sf() as session:
+            res = await session.execute(
+                select(AdminAction).where(AdminAction.action == "hide_channel")
+            )
+            actions = res.scalars().all()
+        await engine.dispose()
+        return actions
+
+    actions = asyncio.run(fetch())
+    relevant = [a for a in actions if (a.target or {}).get("channel_id") == target["id"]]
+    assert len(relevant) >= 2  # idempotent → two audit rows
+
+
+@pytest.mark.integration
+def test_unhide_channel_writes_audit(configured_env, admin_record, channels):
+    from sqlalchemy import select
+    from shared.config import get_settings
+    from shared.db import make_engine, make_session_factory
+    from shared.models import AdminAction
+    from api.main import app
+
+    target = next(c for c in channels if c["title"].endswith("#1"))
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        # First hide so unhide has something to do; the action under test is unhide.
+        h = client.post(
+            f"/admin/channels/{target['id']}/hide",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert h.status_code == 200
+
+        r = client.post(
+            f"/admin/channels/{target['id']}/unhide",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["hidden"] is False
+
+    async def fetch():
+        get_settings.cache_clear()
+        engine = make_engine(get_settings().postgres_dsn)
+        sf = make_session_factory(engine)
+        async with sf() as session:
+            res = await session.execute(
+                select(AdminAction).where(AdminAction.action == "unhide_channel")
+            )
+            actions = res.scalars().all()
+        await engine.dispose()
+        return actions
+
+    actions = asyncio.run(fetch())
+    relevant = [a for a in actions if (a.target or {}).get("channel_id") == target["id"]]
+    assert len(relevant) >= 1
+
+
+@pytest.mark.integration
+def test_hide_404_for_unknown_channel(configured_env, admin_record):
+    from api.main import app
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        r = client.post(
+            "/admin/channels/999999/hide",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 404
+        assert r.json()["detail"]["error"]["code"] == "channel_not_found"
+
+
+@pytest.mark.integration
+def test_list_channels_returns_hidden_flag(configured_env, admin_record, channels):
+    from api.main import app
+
+    seeded_ids = {c["id"] for c in channels}
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        r = client.get(
+            "/admin/channels?limit=200", headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        seeded_rows = [c for c in body["channels"] if c["id"] in seeded_ids]
+        assert seeded_rows, "freshly seeded channels not found in response"
+        # The hidden flag is exposed and defaults to False on freshly seeded rows.
+        assert all("hidden" in c for c in seeded_rows)
+        assert all(c["hidden"] is False for c in seeded_rows)
+
+
+@pytest.mark.integration
 def test_user_token_rejected_on_admin_endpoint(configured_env, admin_record, channels):
     """Cross-issuer protection: a user-side access token must not work here."""
     from shared.auth.jwt import encode_access
