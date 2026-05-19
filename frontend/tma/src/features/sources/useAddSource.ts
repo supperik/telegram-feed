@@ -19,6 +19,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   username_not_occupied: 'Канал с таким username не найден',
   username_invalid: 'Неверный username',
   channel_private: 'Канал недоступен этому боту',
+  channel_not_found: 'Канал не найден',
+  channel_not_available: 'Канал временно недоступен',
+  channel_banned: 'Канал заблокирован',
   unknown: 'Не удалось добавить',
 };
 
