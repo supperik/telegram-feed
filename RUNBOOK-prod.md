@@ -1,26 +1,36 @@
-# Production deployment — zupperik.dev
+# Production deployment
 
-Один файл от голого VDS Ubuntu 24.04 LTS до работающего Telegram Mini App на `https://zupperik.dev` и админ-консоли на `https://admin.zupperik.dev`. Идёшь сверху вниз, выполняешь команды по порядку. Все команды на VDS, если не сказано иначе. Где нужно подставить значение — `<...>`.
+Один файл от голого VDS Ubuntu 24.04 LTS до работающего Telegram Mini App на `https://<DOMAIN>` и админ-консоли на `https://admin.<DOMAIN>`. Идёшь сверху вниз, выполняешь команды по порядку. Все команды на VDS, если не сказано иначе. Где нужно подставить значение — `<...>`.
+
+**Плейсхолдеры, которые встречаются в этом runbook'е** (выпиши свои значения и подставляй по ходу):
+
+| Плейсхолдер | Что это |
+| --- | --- |
+| `<DOMAIN>` | основной домен под TMA, например `example.com` |
+| `admin.<DOMAIN>` | поддомен под админ-консоль |
+| `<VDS_IP>` | публичный IPv4 VDS |
+| `<LETSENCRYPT_EMAIL>` | email для уведомлений Let's Encrypt о приближающейся expiry |
+| `<REPO_URL>` | https-URL git-репозитория с этим проектом (например `https://github.com/<owner>/telegram-feed.git`) |
 
 ## 0. Что должно быть готово ДО начала
 
 - [ ] VDS Ubuntu 24.04 LTS, root-доступ по SSH, публичный IPv4 (запиши: `<VDS_IP>`)
-- [ ] DNS на name.com:
-  - [ ] `zupperik.dev` A-запись → `<VDS_IP>`
-  - [ ] `www.zupperik.dev` A-запись → `<VDS_IP>`
-  - [ ] `admin.zupperik.dev` A-запись → `<VDS_IP>` *(если хочешь сразу админ-консоль; иначе можно пропустить и добавить позже)*
+- [ ] DNS у твоего регистратора:
+  - [ ] `<DOMAIN>` A-запись → `<VDS_IP>`
+  - [ ] `www.<DOMAIN>` A-запись → `<VDS_IP>`
+  - [ ] `admin.<DOMAIN>` A-запись → `<VDS_IP>` *(если хочешь сразу админ-консоль; иначе можно пропустить и добавить позже)*
 - [ ] Тестовый Telegram-бот через `@BotFather` → получен `TG_BOT_TOKEN`
 - [ ] Зарегистрировано приложение на `https://my.telegram.org/apps` под userbot-аккаунтом → `TG_API_ID` + `TG_API_HASH`
 - [ ] Отдельный Telegram-аккаунт (с номером телефона) для userbot — НЕ основной
 - [ ] TOTP-приложение на телефоне (Google Authenticator / Aegis / 1Password)
-- [ ] Email для уведомлений Let's Encrypt: `mr.niki234@mail.ru`
+- [ ] Email для уведомлений Let's Encrypt: `<LETSENCRYPT_EMAIL>`
 
 Проверка DNS перед стартом (с твоего ноута):
 ```bash
-nslookup zupperik.dev
-nslookup admin.zupperik.dev
+nslookup <DOMAIN>
+nslookup admin.<DOMAIN>
 ```
-Должны вернуть `<VDS_IP>`. Если ответ старый — подожди до 30 минут, name.com распространяет записи быстро, но кеш у DNS-резолверов разный.
+Должны вернуть `<VDS_IP>`. Если ответ старый — подожди до 30 минут; разные регистраторы распространяют записи с разной скоростью, плюс у DNS-резолверов свой кеш.
 
 ---
 
@@ -104,7 +114,7 @@ sudo apt install -y certbot
 ```bash
 sudo mkdir -p /opt/telegram-feed
 sudo chown deploy:deploy /opt/telegram-feed
-git clone https://github.com/supperik/telegram-feed.git /opt/telegram-feed
+git clone <REPO_URL> /opt/telegram-feed
 cd /opt/telegram-feed
 ```
 
@@ -143,7 +153,7 @@ nano .env
 - `TG_PHONE` — номер userbot-аккаунта, формат `+79991234567`
 - `TG_BOT_TOKEN` — токен от @BotFather
 
-`API_CORS_ORIGINS` оставь по умолчанию (`https://web.telegram.org,https://zupperik.dev,https://admin.zupperik.dev`). Если решил **не делать** admin-поддомен сейчас, убери из строки `,https://admin.zupperik.dev` — потом добавишь.
+`API_CORS_ORIGINS` оставь по умолчанию (`https://web.telegram.org,https://<DOMAIN>,https://admin.<DOMAIN>`). Если решил **не делать** admin-поддомен сейчас, убери из строки `,https://admin.<DOMAIN>` — потом добавишь.
 
 **Если VDS-провайдер блокирует исходящий трафик к Telegram MTProto** (типичный симптом — `telethon.network.mtprotosender: Attempt N at connecting failed: TimeoutError` на шаге 8, при этом `curl https://1.1.1.1` отвечает) — пропусти userbot через свой MTProxy:
 ```
@@ -172,12 +182,12 @@ TG_PROXY_SECRET=<32-символьный hex secret из @MTProxybot или mtg>
 
 2. Перезапуск:
    ```bash
-   dcp up -d xray-init xray
-   dcp restart ingester
-   dcp logs xray-init    # должно быть "wrote xray config to /etc/xray/config.json", без ошибок
-   dcp logs ingester | tail -30
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d xray-init xray
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml restart ingester
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs xray-init    # должно быть "wrote xray config to /etc/xray/config.json", без ошибок
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs ingester | tail -30
    ```
-   В логах ingester появится `ingester.connected user_id=...`. Если до этого был fresh deploy (или после `dcp down -v`) — сначала повтори шаг 8 (интерактивный SMS-логин).
+   В логах ingester появится `ingester.connected user_id=...`. Если до этого был fresh deploy (или после `docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v`) — сначала повтори шаг 8 (интерактивный SMS-логин).
 
 **Fallback (если transport нестандартный):** в репо лежит шаблон `infra/xray/config.example.json`. Скопируй в `infra/xray/config.json` (gitignored), правь руками, и в `docker-compose.yml` поменяй сервис `xray` обратно на bind-mount `./infra/xray/config.json:/etc/xray/config.json:ro`, убрав сервис `xray-init` и shared volume `xray_config`.
 
@@ -205,10 +215,10 @@ npm run build
 ```bash
 cd /opt/telegram-feed/frontend/admin
 npm ci
-VITE_API_BASE_URL=https://zupperik.dev/api npm run build
+VITE_API_BASE_URL=https://<DOMAIN>/api npm run build
 ```
 
-`VITE_API_BASE_URL` критичен — он зашивается в JS-бандл админки. С ним admin SPA на `admin.zupperik.dev` ходит к API на `zupperik.dev` (cross-origin, CORS уже разрешён в `.env`).
+`VITE_API_BASE_URL` критичен — он зашивается в JS-бандл админки. С ним admin SPA на `admin.<DOMAIN>` ходит к API на `<DOMAIN>` (cross-origin, CORS уже разрешён в `.env`).
 
 Возвращайся в корень:
 ```bash
@@ -224,19 +234,19 @@ cd /opt/telegram-feed
 ```bash
 sudo certbot certonly --standalone \
   --non-interactive --agree-tos \
-  -m mr.niki234@mail.ru \
-  -d zupperik.dev -d www.zupperik.dev -d admin.zupperik.dev
+  -m <LETSENCRYPT_EMAIL> \
+  -d <DOMAIN> -d www.<DOMAIN> -d admin.<DOMAIN>
 ```
 
-Если **admin.zupperik.dev пока без A-записи**, убери `-d admin.zupperik.dev` — выпустишь только на два имени:
+Если **admin.<DOMAIN> пока без A-записи**, убери `-d admin.<DOMAIN>` — выпустишь только на два имени:
 ```bash
 sudo certbot certonly --standalone \
   --non-interactive --agree-tos \
-  -m mr.niki234@mail.ru \
-  -d zupperik.dev -d www.zupperik.dev
+  -m <LETSENCRYPT_EMAIL> \
+  -d <DOMAIN> -d www.<DOMAIN>
 ```
 
-Сертификаты появятся в `/etc/letsencrypt/live/zupperik.dev/{fullchain.pem,privkey.pem}`. Эта папка будет смонтирована в nginx-контейнер read-only.
+Сертификаты появятся в `/etc/letsencrypt/live/<DOMAIN>/{fullchain.pem,privkey.pem}`. Эта папка будет смонтирована в nginx-контейнер read-only.
 
 **Авто-renewal**: systemd-таймер `certbot.timer` уже запущен после apt install. Проверь:
 ```bash
@@ -293,8 +303,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d nginx
 
 Быстрая проверка:
 ```bash
-curl -sk https://zupperik.dev/internal/health           # nginx-ok
-curl -sk https://zupperik.dev/api/internal/health       # {"status":"ok",...}
+curl -sk https://<DOMAIN>/internal/health           # nginx-ok
+curl -sk https://<DOMAIN>/api/internal/health       # {"status":"ok",...}
 ```
 
 Если оба ответа правильные — backend + nginx работают.
@@ -337,7 +347,7 @@ bash infra/scripts/create_admin.sh
 Сразу проверь логин:
 ```bash
 EMAIL=<email>; PASS=<password>; CODE=<6-значный код из TOTP>
-curl -s -X POST https://zupperik.dev/api/admin/login \
+curl -s -X POST https://<DOMAIN>/api/admin/login \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\",\"totp\":\"$CODE\"}"
 ```
@@ -351,9 +361,9 @@ curl -s -X POST https://zupperik.dev/api/admin/login \
 Открой `@BotFather` в Telegram. Для твоего бота:
 
 1. `/mybots` → выбери бота → **Bot Settings**
-2. **Configure Mini App** → **Edit Mini App URL** → введи `https://zupperik.dev`
-3. **Bot Settings** → **Domain** → введи `zupperik.dev`
-4. **Bot Settings** → **Menu Button** → **Configure menu button** → текст "Open Feed", URL `https://zupperik.dev`
+2. **Configure Mini App** → **Edit Mini App URL** → введи `https://<DOMAIN>`
+3. **Bot Settings** → **Domain** → введи `<DOMAIN>`
+4. **Bot Settings** → **Menu Button** → **Configure menu button** → текст "Open Feed", URL `https://<DOMAIN>`
 
 Сохрани изменения. Telegram кеширует Mini App агрессивно — если что-то не работает, удали и пересоздай TMA в BotFather.
 
@@ -366,7 +376,7 @@ curl -s -X POST https://zupperik.dev/api/admin/login \
 Альтернатива — через curl, с фейковым initData *(работает только если backend в режиме `ENV=local`; на проде initData проверяется по HMAC, фальшивый не пройдёт)*. Полноценная проверка — открыть TMA в реальном Telegram-клиенте.
 
 Что должно работать в TMA:
-- ✅ Открывается на `zupperik.dev`
+- ✅ Открывается на `<DOMAIN>`
 - ✅ После загрузки видишь экран с пустой лентой и нижней панелью навигации
 - ✅ Вкладка **Sources** → ввести `meduzaproject` → нажать Add → появится индикатор "joining...", через 30-60 секунд статус сменится на "done"
 - ✅ Вкладка **Feed** → должны появиться 50 последних постов канала
@@ -374,7 +384,7 @@ curl -s -X POST https://zupperik.dev/api/admin/login \
 - ✅ Тап на пост открывает оригинал в Telegram (`tg://resolve`)
 
 Что должно работать в admin:
-- ✅ `https://admin.zupperik.dev` открывает форму логина
+- ✅ `https://admin.<DOMAIN>` открывает форму логина
 - ✅ Логин с email/пароль/TOTP → перенаправляет на `/channels`
 - ✅ Список каналов содержит добавленный выше канал → нажать Ban → канал помечается banned, появляется запись в Audit log
 
@@ -388,21 +398,28 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail 50 i
 
 ## 12. Maintenance — частые команды
 
-Все команды из `/opt/telegram-feed`. Создай alias, чтобы не повторять `-f` каждый раз:
+Все команды выполняются из `/opt/telegram-feed`. Compose-команды используют два override-файла, поэтому в этом разделе везде полная форма
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml <subcommand>
+```
+
+Если работаешь руками в интерактивной SSH-сессии, можно опционально завести alias в своём `~/.bashrc`:
 ```bash
 echo "alias dcp='docker compose -f docker-compose.yml -f docker-compose.prod.yml'" >> ~/.bashrc
 source ~/.bashrc
 ```
+В скриптах и в командах вида `ssh user@host '<cmd>'` этот alias **не работает** — non-interactive shell не загружает `~/.bashrc`, поэтому в этом runbook'е и в `.deploy/DEPLOY.md` дальше всегда подставлена полная команда.
 
 **Логи:**
 ```bash
-dcp logs -f --tail=100              # все сервисы
-dcp logs -f ingester                # один сервис
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100              # все сервисы
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f ingester                # один сервис
 ```
 
 **Перезапуск после изменения .env:**
 ```bash
-dcp restart api ingester
+docker compose -f docker-compose.yml -f docker-compose.prod.yml restart api ingester
 ```
 
 **Pull нового кода + редеплой:**
@@ -411,22 +428,22 @@ cd /opt/telegram-feed
 git pull
 
 # Если поменялся backend
-dcp build api ingester
-dcp up -d api ingester
-dcp exec api alembic upgrade head
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build api ingester
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d api ingester
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec api alembic upgrade head
 
 # Если поменялся TMA
 cd frontend/tma && npm ci && npm run build && cd ../..
-dcp restart nginx
+docker compose -f docker-compose.yml -f docker-compose.prod.yml restart nginx
 
 # Если поменялся admin
-cd frontend/admin && npm ci && VITE_API_BASE_URL=https://zupperik.dev/api npm run build && cd ../..
-dcp restart nginx
+cd frontend/admin && npm ci && VITE_API_BASE_URL=https://<DOMAIN>/api npm run build && cd ../..
+docker compose -f docker-compose.yml -f docker-compose.prod.yml restart nginx
 ```
 
 **Бэкап Postgres (раз в день, cron):**
 ```bash
-dcp exec -T postgres pg_dump -U tgf telegram_feed | gzip > /opt/telegram-feed/backups/$(date +%F).sql.gz
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres pg_dump -U tgf telegram_feed | gzip > /opt/telegram-feed/backups/$(date +%F).sql.gz
 ```
 
 Простой cron:
@@ -437,26 +454,26 @@ mkdir -p /opt/telegram-feed/backups
 
 **Полная остановка:**
 ```bash
-dcp down            # без потери данных
-dcp down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session) — НЕ запускай если не знаешь зачем
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down            # без потери данных
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session) — НЕ запускай если не знаешь зачем
 ```
 
 ---
 
 ## 13. Troubleshooting
 
-### `curl https://zupperik.dev/...` → SSL handshake error
-- Сертификат не выпустился: `sudo certbot certificates` — должна быть строка `zupperik.dev`.
-- nginx не подхватил: `dcp restart nginx && dcp logs nginx`.
+### `curl https://<DOMAIN>/...` → SSL handshake error
+- Сертификат не выпустился: `sudo certbot certificates` — должна быть строка `<DOMAIN>`.
+- nginx не подхватил: `docker compose -f docker-compose.yml -f docker-compose.prod.yml restart nginx && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs nginx`.
 - ufw закрыл 443: `sudo ufw status`.
 
 ### Mini App в Telegram показывает белый экран
-- Открой URL в браузере: `https://zupperik.dev`. Если 404 — TMA dist не собран или не смонтирован.
+- Открой URL в браузере: `https://<DOMAIN>`. Если 404 — TMA dist не собран или не смонтирован.
 - Проверь: `ls /opt/telegram-feed/frontend/tma/dist/index.html`.
-- В nginx: `dcp exec nginx ls /var/www/tma`.
+- В nginx: `docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx ls /var/www/tma`.
 
 ### Mini App не открывается в Telegram (но в браузере работает)
-- В BotFather Domain не выставлен. Bot Settings → Domain → `zupperik.dev`.
+- В BotFather Domain не выставлен. Bot Settings → Domain → `<DOMAIN>`.
 - Mini App URL не выставлен или кеш Telegram старый. Пересоздай Mini App в BotFather.
 
 ### Ingester не подключается, в логах FloodWaitError
@@ -465,7 +482,7 @@ dcp down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session
 
 ### Ingester падает с `Connection to Telegram failed N time(s)` / `TimeoutError` на Attempt 1..6
 - VDS-провайдер режет MTProto-IP (`149.154.0.0/16`). Проверь: `curl -v --max-time 6 https://149.154.167.51:443` висит, а `curl https://1.1.1.1` — отвечает.
-- Решение: настрой MTProxy через переменные `TG_PROXY_*` в `.env` (см. шаг 4), затем `dcp restart ingester`.
+- Решение: настрой MTProxy через переменные `TG_PROXY_*` в `.env` (см. шаг 4), затем `docker compose -f docker-compose.yml -f docker-compose.prod.yml restart ingester`.
 - Альтернатива №1 (рекомендуется): подними **xray-sidecar с VLESS outbound** (см. шаг 4 — раздел «Альтернатива — VLESS sidecar»). TLS-маскированный туннель устойчивее MTProxy к DPI.
 - Альтернатива №2: мигрировать VDS к провайдеру вне зоны блокировки (Hetzner / Contabo / OVH).
 
@@ -474,13 +491,13 @@ dcp down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session
 - Volume `tg_session` есть? `docker volume ls | grep tg_session`.
 
 ### `POST /api/sources` возвращает 202, но канал не появляется
-- Проверь логи ingester: `dcp logs ingester | grep join_worker`.
+- Проверь логи ingester: `docker compose -f docker-compose.yml -f docker-compose.prod.yml logs ingester | grep join_worker`.
 - Username канала: только публичные, формат `meduzaproject` (без `@`).
 - Если канал был раньше добавлен и не нашёлся — заведи issue `bd create`, есть баг `telegram-feed-cfm` про регистр username'а.
 
 ### Admin SPA загружается, но логин выдаёт CORS-ошибку
-- В `.env` нет `https://admin.zupperik.dev` в `API_CORS_ORIGINS`.
-- После правки: `dcp restart api`.
+- В `.env` нет `https://admin.<DOMAIN>` в `API_CORS_ORIGINS`.
+- После правки: `docker compose -f docker-compose.yml -f docker-compose.prod.yml restart api`.
 
 ### `certbot renew` падает
 - nginx занимает порт 80, certbot не может подняться в standalone. Решение: использовать webroot вместо standalone:
@@ -514,10 +531,10 @@ dcp down -v         # ⚠ удалит volumes (Postgres data, MinIO, tg_session
 
 ## 15. Чек-лист "всё работает"
 
-- [ ] `https://zupperik.dev/internal/health` → `nginx-ok`
-- [ ] `https://zupperik.dev/api/internal/health` → `{"status":"ok"}`
-- [ ] `https://admin.zupperik.dev/` загружает форму логина
-- [ ] `dcp logs ingester` показывает `ingester.connected` без ошибок
+- [ ] `https://<DOMAIN>/internal/health` → `nginx-ok`
+- [ ] `https://<DOMAIN>/api/internal/health` → `{"status":"ok"}`
+- [ ] `https://admin.<DOMAIN>/` загружает форму логина
+- [ ] `docker compose -f docker-compose.yml -f docker-compose.prod.yml logs ingester` показывает `ingester.connected` без ошибок
 - [ ] В Telegram бот открывает TMA, видна лента
 - [ ] Добавление канала через TMA → backfill отрабатывает за < 60 секунд
 - [ ] Логин в admin → ban канала → запись в Audit log
