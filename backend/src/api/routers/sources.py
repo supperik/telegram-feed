@@ -13,6 +13,8 @@ from api.schemas.sources import (
     AddSourceIn,
     AddSourceOut,
     ChannelSummary,
+    HiddenSourceItem,
+    HiddenSourceList,
     QueueStatusOut,
     SourceList,
     SourceListItem,
@@ -23,7 +25,11 @@ from shared.repositories.user_sources import (
     list_user_sources,
     remove_user_source,
 )
-from shared.repositories.user_states import hide_channel as hide_channel_repo
+from shared.repositories.user_states import (
+    hide_channel as hide_channel_repo,
+    list_hidden_channels,
+    unhide_channel as unhide_channel_repo,
+)
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -154,6 +160,28 @@ async def queue_status(
         error_code=qrow.error_code,
         error_reason=qrow.error_reason,
         channel=channel,
+    )
+
+
+@router.get("/hidden", response_model=HiddenSourceList)
+async def get_hidden_sources(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> HiddenSourceList:
+    rows = await list_hidden_channels(db, user_id=user.id)
+    return HiddenSourceList(
+        items=[
+            HiddenSourceItem(
+                channel=ChannelSummary(
+                    id=row.channel_id,
+                    username=row.channel_username,
+                    title=row.channel_title,
+                    photo_url=channel_photo_url(row.channel_id, row.channel_photo_storage_key),
+                ),
+                hidden_at=row.hidden_at,
+            )
+            for row in rows
+        ]
     )
 
 
