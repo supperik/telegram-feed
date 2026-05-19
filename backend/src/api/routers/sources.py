@@ -13,6 +13,8 @@ from api.schemas.sources import (
     AddSourceIn,
     AddSourceOut,
     ChannelSummary,
+    HiddenSourceItem,
+    HiddenSourceList,
     QueueStatusOut,
     SourceList,
     SourceListItem,
@@ -23,7 +25,11 @@ from shared.repositories.user_sources import (
     list_user_sources,
     remove_user_source,
 )
-from shared.repositories.user_states import hide_channel as hide_channel_repo
+from shared.repositories.user_states import (
+    hide_channel as hide_channel_repo,
+    list_hidden_channels,
+    unhide_channel as unhide_channel_repo,
+)
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -157,6 +163,28 @@ async def queue_status(
     )
 
 
+@router.get("/hidden", response_model=HiddenSourceList)
+async def get_hidden_sources(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> HiddenSourceList:
+    rows = await list_hidden_channels(db, user_id=user.id)
+    return HiddenSourceList(
+        items=[
+            HiddenSourceItem(
+                channel=ChannelSummary(
+                    id=row.channel_id,
+                    username=row.channel_username,
+                    title=row.channel_title,
+                    photo_url=channel_photo_url(row.channel_id, row.channel_photo_storage_key),
+                ),
+                hidden_at=row.hidden_at,
+            )
+            for row in rows
+        ]
+    )
+
+
 @router.delete("/{channel_id}", status_code=204)
 async def remove_source(
     channel_id: int,
@@ -177,5 +205,16 @@ async def hide_source(
     if await db.get(Channel, channel_id) is None:
         raise APIError(code="channel_not_found", message="Channel not found", status_code=404)
     await hide_channel_repo(db, user_id=user.id, channel_id=channel_id)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/{channel_id}/hide", status_code=204)
+async def unhide_source(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    await unhide_channel_repo(db, user_id=user.id, channel_id=channel_id)
     await db.commit()
     return Response(status_code=204)
