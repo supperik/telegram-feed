@@ -207,3 +207,14 @@ async def hide_source(
     await hide_channel_repo(db, user_id=user.id, channel_id=channel_id)
     await db.commit()
     return Response(status_code=204)
+
+
+@router.delete("/{channel_id}/hide", status_code=204)
+async def unhide_source(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    await unhide_channel_repo(db, user_id=user.id, channel_id=channel_id)
+    await db.commit()
+    return Response(status_code=204)
