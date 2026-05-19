@@ -31,13 +31,7 @@ async def download_and_store_photo(
         return None
     data = await client.download_media(photo, bytes)
     if not data:
-        try:
-            log.warning("photos.empty_download", channel_id=channel_id, msg_id=msg.id)
-        except ValueError:
-            # Best-effort logging; ignore closed-stream errors from cached
-            # structlog PrintLogger holding a stale stdout (e.g. under pytest
-            # capture). Production behaviour is unchanged.
-            pass
+        log.warning("photos.empty_download", channel_id=channel_id, msg_id=msg.id)
         return None
 
     key = f"photos/{channel_id}/{msg.id}_{photo.id}.jpg"
@@ -76,11 +70,7 @@ async def download_and_store_video_thumb(
         return None
     data = await client.download_media(msg, bytes, thumb=-1)
     if not data:
-        try:
-            log.warning("photos.empty_video_thumb", channel_id=channel_id, msg_id=msg.id)
-        except ValueError:
-            # Best-effort logging; see download_and_store_photo.
-            pass
+        log.warning("photos.empty_video_thumb", channel_id=channel_id, msg_id=msg.id)
         return None
 
     key = f"video_thumbs/{channel_id}/{msg.id}_{video.id}.jpg"
@@ -112,10 +102,7 @@ async def download_and_store_channel_photo(
     """
     data = await client.download_profile_photo(entity, file=bytes)
     if not data:
-        try:
-            log.warning("photos.no_channel_photo", channel_id=channel_id)
-        except ValueError:
-            pass
+        log.warning("photos.no_channel_photo", channel_id=channel_id)
         return None
 
     key = f"channel_photos/{channel_id}.jpg"
@@ -149,10 +136,7 @@ async def download_and_store_video(
         return None
     data = await client.download_media(msg, bytes)
     if not data:
-        try:
-            log.warning("photos.empty_video", channel_id=channel_id, msg_id=msg.id)
-        except ValueError:
-            pass
+        log.warning("photos.empty_video", channel_id=channel_id, msg_id=msg.id)
         return None
 
     key = f"videos/{channel_id}/{msg.id}_{video.id}.mp4"
@@ -196,12 +180,9 @@ async def _maybe_download_full_video(
             channel_id=channel_id, bucket=bucket,
         )
     except Exception as e:  # noqa: BLE001 — cap-helper must never raise
-        try:
-            log.warning(
-                "photos.full_video_download_failed",
-                channel_id=channel_id, msg_id=getattr(msg, "id", None),
-                error=str(e),
-            )
-        except ValueError:
-            pass
+        log.warning(
+            "photos.full_video_download_failed",
+            channel_id=channel_id, msg_id=getattr(msg, "id", None),
+            error=str(e),
+        )
         return None

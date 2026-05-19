@@ -56,10 +56,7 @@ async def merge_existing_albums(
         rows = res.all()
 
     if not rows:
-        try:
-            log.info("merge_existing_albums.noop")
-        except ValueError:
-            pass
+        log.info("merge_existing_albums.noop")
         return 0
 
     by_channel: dict[tuple[int, int], list[tuple[int, int]]] = {}
@@ -68,24 +65,18 @@ async def merge_existing_albums(
             (post_id, tg_message_id)
         )
 
-    try:
-        log.info("merge_existing_albums.start", channels=len(by_channel), posts=len(rows))
-    except ValueError:
-        pass
+    log.info("merge_existing_albums.start", channels=len(by_channel), posts=len(rows))
 
     total_merged = 0
     for (channel_id, tg_chat_id), post_pairs in by_channel.items():
         try:
             entity = await client.get_entity(tg_chat_id)
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning(
-                    "merge_existing_albums.get_entity_failed",
-                    channel_id=channel_id,
-                    error=str(e),
-                )
-            except ValueError:
-                pass
+            log.warning(
+                "merge_existing_albums.get_entity_failed",
+                channel_id=channel_id,
+                error=str(e),
+            )
             continue
 
         msg_by_id: dict[int, object] = {}
@@ -95,14 +86,11 @@ async def merge_existing_albums(
             try:
                 messages = await client.get_messages(entity, ids=batch)
             except Exception as e:  # noqa: BLE001
-                try:
-                    log.warning(
-                        "merge_existing_albums.get_messages_failed",
-                        channel_id=channel_id,
-                        error=str(e),
-                    )
-                except ValueError:
-                    pass
+                log.warning(
+                    "merge_existing_albums.get_messages_failed",
+                    channel_id=channel_id,
+                    error=str(e),
+                )
                 continue
             for mid, msg in zip(batch, messages):
                 if msg is not None:
@@ -185,10 +173,7 @@ async def merge_existing_albums(
 
             total_merged += len(tail_ids)
 
-    try:
-        log.info("merge_existing_albums.complete", merged=total_merged)
-    except ValueError:
-        pass
+    log.info("merge_existing_albums.complete", merged=total_merged)
     return total_merged
 
 

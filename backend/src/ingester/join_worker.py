@@ -436,11 +436,8 @@ async def _handle_one_pending(
             channel_id=channel.id, bucket=bucket,
         )
     except Exception as e:  # noqa: BLE001
-        try:
-            log.warning("join_worker.channel_photo_failed",
-                        channel_id=channel.id, error=str(e))
-        except ValueError:
-            pass
+        log.warning("join_worker.channel_photo_failed",
+                    channel_id=channel.id, error=str(e))
         storage_key = None
     if storage_key is not None:
         async with session_factory() as session:

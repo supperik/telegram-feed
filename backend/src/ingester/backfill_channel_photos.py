@@ -57,30 +57,21 @@ async def backfill_channel_photos(
         rows = res.all()
 
     if not rows:
-        try:
-            log.info("backfill_channel_photos.noop")
-        except ValueError:
-            pass
+        log.info("backfill_channel_photos.noop")
         return 0
 
-    try:
-        log.info("backfill_channel_photos.start", channels=len(rows))
-    except ValueError:
-        pass
+    log.info("backfill_channel_photos.start", channels=len(rows))
 
     filled = 0
     for channel_id, tg_chat_id in rows:
         try:
             entity = await client.get_entity(tg_chat_id)
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning(
-                    "backfill_channel_photos.get_entity_failed",
-                    channel_id=channel_id,
-                    error=str(e),
-                )
-            except ValueError:
-                pass
+            log.warning(
+                "backfill_channel_photos.get_entity_failed",
+                channel_id=channel_id,
+                error=str(e),
+            )
             continue
 
         try:
@@ -89,14 +80,11 @@ async def backfill_channel_photos(
                 channel_id=channel_id, bucket=bucket,
             )
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning(
-                    "backfill_channel_photos.download_failed",
-                    channel_id=channel_id,
-                    error=str(e),
-                )
-            except ValueError:
-                pass
+            log.warning(
+                "backfill_channel_photos.download_failed",
+                channel_id=channel_id,
+                error=str(e),
+            )
             continue
 
         if storage_key is None:
@@ -111,8 +99,5 @@ async def backfill_channel_photos(
             await session.commit()
         filled += 1
 
-    try:
-        log.info("backfill_channel_photos.complete", filled=filled)
-    except ValueError:
-        pass
+    log.info("backfill_channel_photos.complete", filled=filled)
     return filled

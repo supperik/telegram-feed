@@ -59,27 +59,18 @@ async def backfill_recent_media(
         targets = res.all()
 
     if not targets:
-        try:
-            log.info("backfill.noop")
-        except ValueError:
-            pass
+        log.info("backfill.noop")
         return 0
 
-    try:
-        log.info("backfill.start", channels=len(targets), limit=limit)
-    except ValueError:
-        pass
+    log.info("backfill.start", channels=len(targets), limit=limit)
 
     total = 0
     for channel_id, tg_chat_id in targets:
         try:
             entity = await client.get_entity(tg_chat_id)
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning("backfill.get_entity_failed",
-                            channel_id=channel_id, error=str(e))
-            except ValueError:
-                pass
+            log.warning("backfill.get_entity_failed",
+                        channel_id=channel_id, error=str(e))
             continue
 
         channel_count = 0
@@ -97,16 +88,10 @@ async def backfill_recent_media(
             )
 
         total += channel_count
-        try:
-            log.info("backfill.channel_done",
-                     channel_id=channel_id, filled=channel_count)
-        except ValueError:
-            pass
+        log.info("backfill.channel_done",
+                 channel_id=channel_id, filled=channel_count)
 
-    try:
-        log.info("backfill.complete", total_filled=total)
-    except ValueError:
-        pass
+    log.info("backfill.complete", total_filled=total)
     return total
 
 

@@ -48,34 +48,25 @@ async def backfill_text_html(
         rows = res.all()
 
     if not rows:
-        try:
-            log.info("backfill_text_html.noop")
-        except ValueError:
-            pass
+        log.info("backfill_text_html.noop")
         return 0
 
     by_channel: dict[int, list[tuple[int, int, str]]] = {}
     for post_id, tg_message_id, tg_chat_id, text in rows:
         by_channel.setdefault(tg_chat_id, []).append((post_id, tg_message_id, text))
 
-    try:
-        log.info("backfill_text_html.start", channels=len(by_channel), posts=len(rows))
-    except ValueError:
-        pass
+    log.info("backfill_text_html.start", channels=len(by_channel), posts=len(rows))
 
     total = 0
     for tg_chat_id, posts in by_channel.items():
         try:
             entity = await client.get_entity(tg_chat_id)
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning(
-                    "backfill_text_html.get_entity_failed",
-                    tg_chat_id=tg_chat_id,
-                    error=str(e),
-                )
-            except ValueError:
-                pass
+            log.warning(
+                "backfill_text_html.get_entity_failed",
+                tg_chat_id=tg_chat_id,
+                error=str(e),
+            )
             continue
 
         # text lookup by tg_message_id for fallback (deleted messages).
@@ -88,14 +79,11 @@ async def backfill_text_html(
             try:
                 messages = await client.get_messages(entity, ids=batch)
             except Exception as e:  # noqa: BLE001
-                try:
-                    log.warning(
-                        "backfill_text_html.get_messages_failed",
-                        tg_chat_id=tg_chat_id,
-                        error=str(e),
-                    )
-                except ValueError:
-                    pass
+                log.warning(
+                    "backfill_text_html.get_messages_failed",
+                    tg_chat_id=tg_chat_id,
+                    error=str(e),
+                )
                 continue
 
             for tg_msg_id, msg in zip(batch, messages):
@@ -116,10 +104,7 @@ async def backfill_text_html(
                     await session.commit()
                 total += 1
 
-    try:
-        log.info("backfill_text_html.complete", filled=total)
-    except ValueError:
-        pass
+    log.info("backfill_text_html.complete", filled=total)
     return total
 
 

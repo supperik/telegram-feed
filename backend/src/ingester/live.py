@@ -72,10 +72,7 @@ async def on_new_message(
     if channel_id is None:
         # An event from a channel we don't track (cache miss after a recent join).
         # Best-effort: skip; the next subscribe will pick it up.
-        try:
-            log.debug("live.unknown_chat", chat_id=chat_id)
-        except ValueError:
-            pass
+        log.debug("live.unknown_chat", chat_id=chat_id)
         return
 
     msg = event.message
@@ -150,12 +147,9 @@ async def on_new_album(
                         channel_id=channel_id, bucket=bucket,
                     )
             except Exception as e:  # noqa: BLE001
-                try:
-                    log.warning("live.album_download_failed",
-                                channel_id=channel_id, msg_id=msg.id,
-                                media_type=mtype, error=str(e))
-                except ValueError:
-                    pass
+                log.warning("live.album_download_failed",
+                            channel_id=channel_id, msg_id=msg.id,
+                            media_type=mtype, error=str(e))
 
             if storage_key is not None:
                 await session.execute(
@@ -195,12 +189,9 @@ async def download_and_set_storage_keys(
                     channel_id=channel_id, bucket=bucket,
                 )
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning("live.download_failed",
-                            channel_id=channel_id, msg_id=msg.id,
-                            media_type=mtype, error=str(e))
-            except ValueError:
-                pass  # stdout-cache issue under pytest
+            log.warning("live.download_failed",
+                        channel_id=channel_id, msg_id=msg.id,
+                        media_type=mtype, error=str(e))
 
         if storage_key is not None:
             await session.execute(
@@ -257,10 +248,7 @@ async def subscribe_to_active_channels(
     # Both handlers reuse the shared mutable chat_map for filtering.
     client.add_event_handler(handler, events.NewMessage())
     client.add_event_handler(album_handler, events.Album())
-    try:
-        log.info("live.subscribed", count=len(chat_map))
-    except ValueError:
-        pass
+    log.info("live.subscribed", count=len(chat_map))
     return chat_map
 
 
@@ -322,11 +310,8 @@ async def catchup_channels(
         try:
             entity = await client.get_entity(tg_chat_id)
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning("live.catchup_get_entity_failed",
-                            channel_id=channel_id, error=str(e))
-            except ValueError:
-                pass
+            log.warning("live.catchup_get_entity_failed",
+                        channel_id=channel_id, error=str(e))
             continue
 
         collected: list[Any] = []
@@ -382,10 +367,7 @@ async def catchup_channels(
                         settings=settings,
                     )
                 await session.commit()
-        try:
-            log.info("live.catchup_done", channel_id=channel_id, new=count)
-        except ValueError:
-            pass
+        log.info("live.catchup_done", channel_id=channel_id, new=count)
 
 
 async def _download_one_and_update_storage_key(
@@ -412,12 +394,9 @@ async def _download_one_and_update_storage_key(
                 channel_id=channel_id, bucket=bucket,
             )
     except Exception as e:  # noqa: BLE001
-        try:
-            log.warning("live.download_failed",
-                        channel_id=channel_id, msg_id=msg.id,
-                        media_type=mtype, error=str(e))
-        except ValueError:
-            pass
+        log.warning("live.download_failed",
+                    channel_id=channel_id, msg_id=msg.id,
+                    media_type=mtype, error=str(e))
 
     if storage_key is not None:
         await session.execute(

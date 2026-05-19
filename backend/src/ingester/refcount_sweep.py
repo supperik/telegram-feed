@@ -23,10 +23,7 @@ async def run_refcount_sweep(
         try:
             await _sweep_once(client, session_factory)
         except Exception as e:  # noqa: BLE001
-            try:
-                log.exception("refcount_sweep.error", error=str(e))
-            except ValueError:
-                pass
+            log.exception("refcount_sweep.error", error=str(e))
         await asyncio.sleep(interval_s)
 
 
@@ -48,11 +45,8 @@ async def _sweep_once(
             entity = await client.get_entity(tg_chat_id)
             await client(LeaveChannelRequest(entity))
         except Exception as e:  # noqa: BLE001
-            try:
-                log.warning("refcount_sweep.leave_failed",
-                            channel_id=channel_id, error=str(e))
-            except ValueError:
-                pass
+            log.warning("refcount_sweep.leave_failed",
+                        channel_id=channel_id, error=str(e))
             continue
 
         async with session_factory() as session:
@@ -62,7 +56,4 @@ async def _sweep_once(
                 .values(status="left")
             )
             await session.commit()
-        try:
-            log.info("refcount_sweep.left", channel_id=channel_id)
-        except ValueError:
-            pass
+        log.info("refcount_sweep.left", channel_id=channel_id)
