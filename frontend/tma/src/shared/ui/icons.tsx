@@ -98,3 +98,4 @@ export const LockIcon = makeIcon(
   '0 0 24 24',
   'lock',
 );
+export const ChevronDownIcon = makeIcon(<polyline points="6 9 12 15 18 9" />);
