@@ -35,7 +35,7 @@ async def _reset_catalog_dependent_rows(db_session):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
+async def test_list_available_excludes_banned_inactive_and_hidden(
     db_session, seed_user
 ) -> None:
     uid = await seed_user(tg_user_id=101)
@@ -48,7 +48,8 @@ async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
     )
     # inactive subscription — must NOT appear
     ch_inactive = Channel(tg_chat_id=1003, username="cat_c", title="C", posts_count=3)
-    # ref_count == 0 orphan — must NOT appear
+    # ref_count == 0 orphan — MUST appear (no min-subscribers cutoff, so a user
+    # can re-subscribe via the catalog after being the last unsubscriber)
     ch_orphan = Channel(tg_chat_id=1004, username="cat_d", title="D", posts_count=2)
     # active but hidden by this user — must NOT appear
     ch_hidden = Channel(tg_chat_id=1005, username="cat_e", title="E", posts_count=20)
@@ -72,7 +73,8 @@ async def test_list_available_excludes_banned_inactive_orphaned_and_hidden(
         limit=50,
         q=None,
     )
-    assert [r.channel_id for r in rows] == [ch_active.id]
+    # Sort: posts_count DESC, id DESC → ch_active (10), ch_orphan (2)
+    assert [r.channel_id for r in rows] == [ch_active.id, ch_orphan.id]
 
 
 @pytest.mark.integration

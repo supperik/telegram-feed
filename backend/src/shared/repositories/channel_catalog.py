@@ -72,7 +72,6 @@ async def list_catalog_available(
         .where(
             Channel.banned.is_(False),
             ChannelSubscription.status == "active",
-            ChannelSubscription.ref_count > 0,
             Channel.id.notin_(hidden_select),
             tuple_(Channel.posts_count, Channel.id)
             < tuple_(cursor.posts_count, cursor.channel_id),
