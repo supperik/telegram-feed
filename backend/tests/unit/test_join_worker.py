@@ -598,6 +598,98 @@ def test_handle_one_pending_private_registers_chat_map(monkeypatch):
     fake_backfill.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_post_join_writes_invite_hash_for_private_invite(monkeypatch):
+    """T8: for private-invite joins, _post_join must UPDATE channels SET
+    invite_hash so the just-created Channel row stores the hash we joined
+    via (used later to render invite_url in the feed and to re-join after
+    cache loss). The hash is the same value that came in on the queue row.
+    """
+    from ingester.join_worker import _post_join
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    monkeypatch.setattr(
+        "ingester.join_worker.upsert_channel",
+        AsyncMock(return_value=MagicMock(id=7, tg_chat_id=12345)),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.add_user_source", AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.mark_join_done", AsyncMock(),
+    )
+    row = MagicMock()
+    row.id = 1
+    row.requested_by_user_id = 42
+    row.kind = "private_invite"
+    row.invite_hash = "abc123"
+    chat = MagicMock()
+    chat.id = 12345
+    chat.username = None
+    chat.title = "Private chan"
+
+    await _post_join(session, row=row, chat=chat)
+
+    update_calls = session.execute.await_args_list
+    seen = False
+    for call in update_calls:
+        stmt = call.args[0]
+        try:
+            compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        except Exception:
+            compiled = str(stmt)
+        if "UPDATE channels" in compiled and "invite_hash" in compiled and "abc123" in compiled:
+            seen = True
+            break
+    assert seen, f"Expected UPDATE channels SET invite_hash for private_invite. Saw: {update_calls}"
+
+
+@pytest.mark.asyncio
+async def test_post_join_skips_invite_hash_for_public_username(monkeypatch):
+    """T8: for public-username joins, _post_join must NOT touch
+    channels.invite_hash — there's nothing meaningful to write (the
+    channel is public). Touching it would either store an empty string or
+    propagate `None` into a column that may already hold a valid hash from
+    a prior private-invite join of the same channel.
+    """
+    from ingester.join_worker import _post_join
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    monkeypatch.setattr(
+        "ingester.join_worker.upsert_channel",
+        AsyncMock(return_value=MagicMock(id=7, tg_chat_id=12345)),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.add_user_source", AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "ingester.join_worker.mark_join_done", AsyncMock(),
+    )
+    row = MagicMock()
+    row.id = 1
+    row.requested_by_user_id = 42
+    row.kind = "public_username"
+    row.invite_hash = None
+    chat = MagicMock()
+    chat.id = 12345
+    chat.username = "meduzaproject"
+    chat.title = "Meduza"
+
+    await _post_join(session, row=row, chat=chat)
+
+    for call in session.execute.await_args_list:
+        stmt = call.args[0]
+        try:
+            compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        except Exception:
+            compiled = str(stmt)
+        assert "invite_hash" not in compiled, (
+            f"Did not expect invite_hash in UPDATE for public_username: {compiled}"
+        )
+
+
 def test_backfill_channel_downloads_media_for_solo_photo(monkeypatch):
     """_backfill_channel must actually download media (not just insert Media
     rows with storage_key=NULL) so newly joined channels show thumbnails

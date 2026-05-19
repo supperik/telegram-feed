@@ -126,7 +126,8 @@ async def _backfill_channel(
 
 
 async def _post_join(session, *, row, chat):
-    """Common tail of any successful join: upsert channel, link user_source, mark done.
+    """Common tail of any successful join: upsert channel, link user_source,
+    mark done, и (для private_invite) проставить channel.invite_hash.
 
     Used by both public-username flow and (T7) private-invite flow. Returns the
     Channel ORM object so callers can run backfill outside the session block
@@ -138,6 +139,12 @@ async def _post_join(session, *, row, chat):
         username=getattr(chat, "username", None),
         title=getattr(chat, "title", None) or getattr(chat, "username", None) or "(no title)",
     )
+    if row.kind == "private_invite" and row.invite_hash:
+        await session.execute(
+            update(Channel)
+            .where(Channel.id == channel.id)
+            .values(invite_hash=row.invite_hash)
+        )
     await add_user_source(
         session, user_id=row.requested_by_user_id, channel_id=channel.id
     )
