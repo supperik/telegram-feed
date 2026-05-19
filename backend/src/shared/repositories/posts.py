@@ -38,6 +38,16 @@ async def upsert_post(
         if existing_id is not None:
             if not media_values:
                 return existing_id
+            # Dedupe by tg_file_id: catchup_channels re-feeds the album's
+            # tail messages (msg_id > head.id) on every restart, so the
+            # same media would otherwise be appended again each boot.
+            present_res = await session.execute(
+                select(Media.tg_file_id).where(Media.post_id == existing_id)
+            )
+            present = set(present_res.scalars().all())
+            new_media = [m for m in media_values if m["tg_file_id"] not in present]
+            if not new_media:
+                return existing_id
             max_pos_res = await session.execute(
                 select(func.coalesce(func.max(Media.position), -1)).where(
                     Media.post_id == existing_id
@@ -48,7 +58,7 @@ async def upsert_post(
                 insert(Media),
                 [
                     {**m, "post_id": existing_id, "position": max_pos + 1 + idx}
-                    for idx, m in enumerate(media_values)
+                    for idx, m in enumerate(new_media)
                 ],
             )
             return existing_id
