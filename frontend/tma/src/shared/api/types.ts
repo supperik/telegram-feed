@@ -76,3 +76,16 @@ export type AddSourceOut =
 export interface AddSourceIn {
   input: string;
 }
+
+export interface CatalogChannelItem {
+  channel: ChannelSummary;
+  subscribers_count: number;
+  last_post_at: string | null;
+  is_subscribed: boolean;
+  is_hidden_from_catalog: boolean;
+}
+
+export interface CatalogPage {
+  items: CatalogChannelItem[];
+  next_cursor: string | null;
+}
