@@ -191,23 +191,24 @@ async def test_list_available_marks_is_subscribed(db_session, seed_user) -> None
 async def test_list_available_q_filter_treats_wildcards_as_literals(
     db_session, seed_user
 ) -> None:
+    """q='100%' must match only the row with a literal '%'. If `%` leaked
+    through as a SQL wildcard, the decoy row containing '100' but no '%'
+    would also match — this row is what makes the test discriminate
+    escape-correct from escape-broken behaviour."""
     uid = await seed_user(tg_user_id=120)
-    # Note: username `cat_other` is already used by the case-insensitive test
-    # earlier in the file; the autouse cleanup fixture wipes subscriptions but
-    # leaves Channel rows behind. Use a unique username here.
     ch_pct = Channel(
         tg_chat_id=8001, username="cat_pct", title="100% real", posts_count=1,
     )
-    ch_other = Channel(
-        tg_chat_id=8002, username="cat_pct_other", title="other channel", posts_count=1,
+    # Decoy: contains "100" but no literal "%". Must NOT match q="100%".
+    ch_decoy = Channel(
+        tg_chat_id=8002, username="cat_decoy", title="100 items in stock", posts_count=1,
     )
-    db_session.add_all([ch_pct, ch_other])
+    db_session.add_all([ch_pct, ch_decoy])
     await db_session.commit()
-    for c in (ch_pct, ch_other):
+    for c in (ch_pct, ch_decoy):
         db_session.add(ChannelSubscription(channel_id=c.id, status="active", ref_count=1))
     await db_session.commit()
 
-    # `%` must be treated as a literal — only the row with literal % should match.
     rows = await list_catalog_available(
         db_session,
         user_id=uid,

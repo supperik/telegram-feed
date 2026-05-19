@@ -27,7 +27,7 @@ class CatalogRow:
     subscribers_count: int
     is_subscribed: bool
     is_hidden_from_catalog: bool
-    hidden_at: datetime | None = None  # only populated in view=hidden, reserved for Task 4
+    hidden_at: datetime | None = None  # populated only by list_catalog_hidden
 
 
 def _q_filter(q: str | None):
@@ -47,12 +47,11 @@ async def list_catalog_available(
     user_id: int,
     cursor: CatalogCursor,
     limit: int,
-    q: str | None,
+    q: str | None = None,
 ) -> list[CatalogRow]:
     assert cursor.view == "available"
-    hidden_select = (
-        select(UserCatalogHiddenChannel.channel_id)
-        .where(UserCatalogHiddenChannel.user_id == user_id)
+    hidden_select = select(UserCatalogHiddenChannel.channel_id).where(
+        UserCatalogHiddenChannel.user_id == user_id
     )
     is_sub = exists().where(
         and_(UserSource.user_id == user_id, UserSource.channel_id == Channel.id)
