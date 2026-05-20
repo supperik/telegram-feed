@@ -14,5 +14,11 @@ export function useFeed(limit = 20) {
       return apiFetch<FeedPage>(`/feed?${search.toString()}`);
     },
     getNextPageParam: (last) => last.next_cursor,
+    // The feed refreshes only on an explicit Refresh tap or a fresh app load
+    // (page reload / full re-entry spins up a new QueryClient). Tab navigation
+    // remounts FeedScreen, but Infinity stale/gc time keeps the cached pages so
+    // no refetch fires. Manual refetch() and invalidateQueries() still work.
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 }
