@@ -52,3 +52,36 @@ async def test_user_catalog_hidden_channel_insert(db_session, seed_user) -> None
     row = await db_session.get(UserCatalogHiddenChannel, (uid, ch.id))
     assert row is not None
     assert row.hidden_at is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_user_read_post_insert_and_fk_cascade(db_session, seed_user) -> None:
+    from sqlalchemy import func, select
+
+    from shared.models import Channel, Post, UserReadPost
+
+    uid = await seed_user(tg_user_id=902)
+    ch = Channel(tg_chat_id=900002, username="x_read", title="XR")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=1, posted_at=datetime.now(tz=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    post_id = p.id
+
+    db_session.add(UserReadPost(user_id=uid, post_id=post_id))
+    await db_session.commit()
+    row = await db_session.get(UserReadPost, (uid, post_id))
+    assert row is not None
+    assert row.read_at is not None
+
+    # FK ON DELETE CASCADE: removing the post removes the read row.
+    await db_session.delete(p)
+    await db_session.commit()
+    remaining = await db_session.scalar(
+        select(func.count())
+        .select_from(UserReadPost)
+        .where(UserReadPost.post_id == post_id)
+    )
+    assert remaining == 0

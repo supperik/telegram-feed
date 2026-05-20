@@ -66,3 +66,15 @@ class UserCatalogHiddenChannel(Base):
     hidden_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class UserReadPost(Base):
+    __tablename__ = "user_read_posts"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    post_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True
+    )
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

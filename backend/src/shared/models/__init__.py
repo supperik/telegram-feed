@@ -9,6 +9,7 @@ from shared.models.user_state import (
     UserCatalogHiddenChannel,
     UserHiddenChannel,
     UserHiddenPost,
+    UserReadPost,
     UserSavedPost,
     UserSource,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "UserSource",
     "UserSavedPost",
     "UserHiddenPost",
+    "UserReadPost",
     "UserCatalogHiddenChannel",
     "UserHiddenChannel",
     "Admin",
