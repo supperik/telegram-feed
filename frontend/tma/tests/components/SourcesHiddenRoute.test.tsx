@@ -142,3 +142,37 @@ describe('routeTree /sources/catalog-hidden integration', () => {
     expect(screen.queryByText(/скрытые из каталога/i)).not.toBeInTheDocument();
   });
 });
+
+describe('routeTree /sources/hidden structure', () => {
+  it('registers /sources/hidden as a sibling of /sources, not a nested child', () => {
+    // `/sources/hidden` (hidden subscriptions) follows the same layout rule as
+    // `/sources/catalog-hidden`: it must be a direct child of root, not nested
+    // under `/sources`. `SourcesScreen` renders no `<Outlet />`, so a nested
+    // route would render `SourcesScreen` again instead of `HiddenSourcesScreen`.
+    type RouteOptions = { id?: string; getParentRoute?: () => RouteLike };
+    type RouteLike = {
+      options?: RouteOptions;
+      children?: RouteLike[] | Record<string, RouteLike>;
+    };
+    const root = generatedRouteTree as unknown as RouteLike;
+
+    function collect(node: RouteLike, acc: RouteLike[] = []): RouteLike[] {
+      acc.push(node);
+      const children = node.children;
+      if (children) {
+        for (const child of Array.isArray(children) ? children : Object.values(children)) {
+          collect(child, acc);
+        }
+      }
+      return acc;
+    }
+
+    const all = collect(root);
+    const idOf = (n: RouteLike) => n.options?.id;
+    const parentOf = (n: RouteLike) => n.options?.getParentRoute?.();
+    const hidden = all.find((n) => idOf(n) === '/sources/hidden');
+    expect(hidden, 'expected /sources/hidden route to exist in the tree').toBeDefined();
+    const hiddenParentId = idOf(parentOf(hidden!) ?? {});
+    expect(hiddenParentId).toBeUndefined();
+  });
+});
