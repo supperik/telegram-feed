@@ -84,17 +84,21 @@ class FakeTelethonClient:
         entity: Any,
         *,
         min_id: int = 0,
+        max_id: int = 0,
         limit: int = 200,
         **_: Any,
     ):
-        """Async-iterate over self.catchup_messages[entity.id] filtered by
-        min_id and capped by limit. Mirrors Telethon's iter_messages where
-        only messages with id > min_id are yielded."""
+        """Async-iterate self.catchup_messages[entity.id], filtered by min_id
+        (id > min_id) and max_id (id < max_id; 0 = no upper bound), capped by
+        limit. Mirrors Telethon: max_id excludes messages with id >= max_id.
+        Yields in seeded list order — seed newest-first for backfill tests."""
         key = getattr(entity, "id", entity)
         msgs = list(self.catchup_messages.get(key, []))
         yielded = 0
         for m in msgs:
             if int(m.id) <= int(min_id):
+                continue
+            if max_id and int(m.id) >= int(max_id):
                 continue
             if yielded >= limit:
                 break
