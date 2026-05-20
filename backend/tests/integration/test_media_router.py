@@ -123,7 +123,7 @@ async def test_media_returns_401_without_any_token(
 ) -> None:
     """No header and no query token → unauthenticated."""
     uid = await seed_user(tg_user_id=64)
-    ch = Channel(tg_chat_id=120004, username="z", title="Z")
+    ch = Channel(tg_chat_id=120004, username="z_media", title="Z")
     db_session.add(ch)
     await db_session.commit()
     p = Post(channel_id=ch.id, tg_message_id=4, posted_at=datetime.now(tz=timezone.utc))
