@@ -29,6 +29,34 @@ async def pop_pending_join_request(session: AsyncSession) -> ChannelJoinQueue | 
     return row
 
 
+async def find_active_public_request(
+    session: AsyncSession,
+    *,
+    username: str,
+    requested_by_user_id: int,
+) -> ChannelJoinQueue | None:
+    """Return this user's in-flight (pending / in_progress) public-username
+    join request for `username`, or None.
+
+    Used to dedup repeat re-subscribe taps: a second POST while the first
+    join is still queued reuses that row. Scoped per user — a different
+    user re-subscribing to the same channel still gets their own request,
+    so their user_source link is created when the join completes.
+    """
+    res = await session.execute(
+        select(ChannelJoinQueue)
+        .where(
+            ChannelJoinQueue.kind == "public_username",
+            ChannelJoinQueue.channel_username == username,
+            ChannelJoinQueue.requested_by_user_id == requested_by_user_id,
+            ChannelJoinQueue.status.in_(("pending", "in_progress")),
+        )
+        .order_by(ChannelJoinQueue.id.asc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
 async def mark_join_done(
     session: AsyncSession, *, queue_id: int, channel_id: int
 ) -> None:

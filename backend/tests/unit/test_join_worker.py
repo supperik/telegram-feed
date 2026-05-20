@@ -808,3 +808,55 @@ def test_backfill_channel_downloads_media_for_solo_photo(monkeypatch):
     assert kwargs["bucket"] == "media"
     assert kwargs["client"] is fake_client
     assert kwargs["minio_client"] is minio
+
+
+def test_join_worker_already_participant_treated_as_success(monkeypatch):
+    """JoinChannelRequest on a channel the userbot still belongs to (a
+    re-subscribe to a dormant channel) raises UserAlreadyParticipantError.
+    That is an idempotent success, not a failure — the worker must run
+    _post_join (link user, mark done), not mark_join_failed."""
+    from telethon.errors import UserAlreadyParticipantError
+    from ingester import join_worker as jw
+
+    pending = MagicMock(
+        id=42, channel_username="dormantchan", channel_id=None,
+        requested_by_user_id=11,
+    )
+    entity = MagicMock(id=1234567890, username="dormantchan", title="Dormant Chan")
+    channel = MagicMock(id=99)
+
+    fake_pop = AsyncMock(side_effect=[pending, None])
+    fake_get_entity = AsyncMock(return_value=entity)
+    fake_upsert_channel = AsyncMock(return_value=channel)
+    fake_add_user_source = AsyncMock(return_value=(True, "pending_backfill"))
+    fake_mark_done = AsyncMock()
+    fake_mark_failed = AsyncMock()
+
+    fake_client = MagicMock()
+    fake_client.get_entity = fake_get_entity
+
+    def _raise_already(_req):
+        raise UserAlreadyParticipantError(request=None)
+    fake_client.side_effect = _raise_already
+    fake_client.iter_messages = MagicMock(return_value=_async_empty())
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.execute = AsyncMock()
+
+    monkeypatch.setattr(jw, "pop_pending_join_request", fake_pop)
+    monkeypatch.setattr(jw, "upsert_channel", fake_upsert_channel)
+    monkeypatch.setattr(jw, "add_user_source", fake_add_user_source)
+    monkeypatch.setattr(jw, "mark_join_done", fake_mark_done)
+    monkeypatch.setattr(jw, "mark_join_failed", fake_mark_failed)
+    monkeypatch.setattr(jw, "JoinChannelRequest", lambda e: ("join", e))
+
+    sf = _fake_session_factory(session)
+    asyncio.run(jw._handle_one_pending(
+        fake_client, sf, minio_client=MagicMock(), bucket="media", settings=_S(),
+    ))
+
+    # Already-a-participant is a success: channel linked + marked done.
+    fake_mark_done.assert_awaited_once_with(session, queue_id=42, channel_id=99)
+    fake_add_user_source.assert_awaited_once_with(session, user_id=11, channel_id=99)
+    fake_mark_failed.assert_not_called()

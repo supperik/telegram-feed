@@ -396,6 +396,11 @@ async def _handle_one_pending(
 
         try:
             await client(JoinChannelRequest(entity))
+        except UserAlreadyParticipantError:
+            # The userbot is still a member — a re-subscribe to a dormant
+            # channel, or a retried join. Idempotent: fall through to _post_join.
+            log.info("join_worker.already_participant",
+                     username=username, queue_id=queue_id)
         except FloodWaitError as e:
             await session.rollback()
             log.info("join_worker.flood_wait_on_join", seconds=e.seconds, queue_id=queue_id)

@@ -21,6 +21,7 @@ from api.schemas.sources import (
     SourceListItem,
 )
 from shared.models import Channel, ChannelJoinQueue, ChannelSubscription, User
+from shared.repositories.join_queue import find_active_public_request
 from shared.repositories.user_sources import (
     add_user_source,
     list_user_sources,
@@ -33,6 +34,11 @@ from shared.repositories.user_states import (
 )
 
 router = APIRouter(prefix="/sources", tags=["sources"])
+
+# Subscription statuses where the channel is already being ingested, so a new
+# subscriber is linked directly. Any other status — dormant, left, or no row —
+# routes through the join queue to reactivate the channel.
+_DIRECT_SUBSCRIBE_STATUSES = ("active", "pending_backfill")
 
 
 @router.post(
@@ -73,28 +79,46 @@ async def _add_public_source(
     if ch is not None:
         if ch.banned:
             raise APIError(code="channel_banned", message="Channel is banned", status_code=403)
-        await add_user_source(db, user_id=user.id, channel_id=ch.id)
-        await db.commit()
-        return AddSourceOut(
-            status="subscribed",
-            channel=ChannelSummary(
-                id=ch.id, username=ch.username, title=ch.title,
-                photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
-            ),
-        )
+        sub = await db.get(ChannelSubscription, ch.id)
+        if sub is not None and sub.status in _DIRECT_SUBSCRIBE_STATUSES:
+            await add_user_source(db, user_id=user.id, channel_id=ch.id)
+            await db.commit()
+            return AddSourceOut(
+                status="subscribed",
+                channel=ChannelSummary(
+                    id=ch.id, username=ch.username, title=ch.title,
+                    photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
+                ),
+            )
+        # Otherwise the channel is dormant / left — fall through to the queue.
 
-    queue_row = ChannelJoinQueue(
-        kind="public_username",
-        channel_username=username,
-        requested_by_user_id=user.id,
-        status="pending",
+    return await _enqueue_public_join(db, user, username=username)
+
+
+async def _enqueue_public_join(
+    db: AsyncSession, user: User, *, username: str
+) -> JSONResponse:
+    """Queue a public-username join, reusing this user's in-flight request
+    for the same channel instead of stacking a duplicate row."""
+    existing = await find_active_public_request(
+        db, username=username, requested_by_user_id=user.id
     )
-    db.add(queue_row)
-    await db.commit()
-    await db.refresh(queue_row)
+    if existing is not None:
+        queue_id = existing.id
+    else:
+        queue_row = ChannelJoinQueue(
+            kind="public_username",
+            channel_username=username,
+            requested_by_user_id=user.id,
+            status="pending",
+        )
+        db.add(queue_row)
+        await db.commit()
+        await db.refresh(queue_row)
+        queue_id = queue_row.id
     return JSONResponse(
         status_code=202,
-        content={"status": "queued", "channel": None, "queue_id": queue_row.id},
+        content={"status": "queued", "channel": None, "queue_id": queue_id},
     )
 
 
@@ -187,12 +211,19 @@ async def get_hidden_sources(
     )
 
 
-@router.post("/{channel_id}", response_model=AddSourceOut)
+@router.post(
+    "/{channel_id}",
+    response_model=None,
+    responses={
+        200: {"model": AddSourceOut},
+        202: {"model": AddSourceOut},
+    },
+)
 async def subscribe_by_channel_id(
     channel_id: int,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> AddSourceOut:
+) -> AddSourceOut | JSONResponse:
     ch = await db.get(Channel, channel_id)
     if ch is None:
         raise APIError(
@@ -203,22 +234,29 @@ async def subscribe_by_channel_id(
             code="channel_banned", message="Channel is banned", status_code=403
         )
     sub = await db.get(ChannelSubscription, channel_id)
-    if sub is None or sub.status != "active":
-        raise APIError(
-            code="channel_not_available",
-            message="Channel is not available for subscription",
-            status_code=404,
+    if sub is not None and sub.status in _DIRECT_SUBSCRIBE_STATUSES:
+        await add_user_source(db, user_id=user.id, channel_id=channel_id)
+        await db.commit()
+        return AddSourceOut(
+            status="subscribed",
+            channel=ChannelSummary(
+                id=ch.id,
+                username=ch.username,
+                title=ch.title,
+                photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
+            ),
         )
-    await add_user_source(db, user_id=user.id, channel_id=channel_id)
-    await db.commit()
-    return AddSourceOut(
-        status="subscribed",
-        channel=ChannelSummary(
-            id=ch.id,
-            username=ch.username,
-            title=ch.title,
-            photo_url=channel_photo_url(ch.id, ch.photo_storage_key),
-        ),
+    # Inactive (dormant / left): reactivate through the join queue. A catalog
+    # "Subscribe" tap lands here, and after telegram-feed-iy7 the catalog
+    # lists dormant channels too.
+    if ch.username is not None:
+        return await _enqueue_public_join(db, user, username=ch.username)
+    if ch.invite_hash is not None:
+        return await _add_private_source(db, user, invite_hash=ch.invite_hash)
+    raise APIError(
+        code="channel_not_available",
+        message="Channel is not available for subscription",
+        status_code=404,
     )
 
 

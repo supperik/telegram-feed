@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 import pytest
 
 from shared.auth.jwt import encode_access
-from shared.models import Channel
+from shared.models import Channel, ChannelSubscription
 
 
 BOT_TOKEN = "1234:test-bot-token"
@@ -64,9 +64,17 @@ async def test_auth_telegram_over_limit_returns_429(async_client) -> None:
 @pytest.mark.asyncio
 async def test_post_sources_under_limit_passes(async_client, db_session, seed_user) -> None:
     user_id = await seed_user(tg_user_id=51)
-    # Pre-create channels so /sources returns 200 (subscribed) instead of 202 (queued).
-    for i in range(3):
-        db_session.add(Channel(tg_chat_id=70000 + i, username=f"u_under_{i}", title=f"T{i}"))
+    # Pre-create active channels so /sources returns 200 (subscribed), not 202.
+    channels = [
+        Channel(tg_chat_id=70000 + i, username=f"u_under_{i}", title=f"T{i}")
+        for i in range(3)
+    ]
+    db_session.add_all(channels)
+    await db_session.commit()
+    for c in channels:
+        db_session.add(
+            ChannelSubscription(channel_id=c.id, status="active", ref_count=1)
+        )
     await db_session.commit()
 
     for i in range(3):
@@ -80,8 +88,16 @@ async def test_post_sources_under_limit_passes(async_client, db_session, seed_us
 @pytest.mark.asyncio
 async def test_post_sources_over_limit_returns_429(async_client, db_session, seed_user) -> None:
     user_id = await seed_user(tg_user_id=52)
-    for i in range(3):
-        db_session.add(Channel(tg_chat_id=80000 + i, username=f"u_over_{i}", title=f"T{i}"))
+    channels = [
+        Channel(tg_chat_id=80000 + i, username=f"u_over_{i}", title=f"T{i}")
+        for i in range(3)
+    ]
+    db_session.add_all(channels)
+    await db_session.commit()
+    for c in channels:
+        db_session.add(
+            ChannelSubscription(channel_id=c.id, status="active", ref_count=1)
+        )
     await db_session.commit()
 
     for i in range(3):

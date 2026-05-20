@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import text
 
 from shared.auth.jwt import encode_access
 from shared.models import (
@@ -51,19 +52,76 @@ async def test_post_sources_by_id_404_for_missing(async_client, seed_user) -> No
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_post_sources_by_id_404_for_inactive(
+async def test_post_sources_by_id_queues_dormant_public(
     async_client, db_session, seed_user
 ) -> None:
-    uid = await seed_user(tg_user_id=203)
-    ch = Channel(tg_chat_id=9002, username="cat_ina", title="Ina", posts_count=1)
+    """A catalog re-subscribe (POST /sources/{id}) to a dormant public
+    channel queues a public-username join instead of returning 404
+    (telegram-feed-iy7)."""
+    uid = await seed_user(tg_user_id=230)
+    ch = Channel(tg_chat_id=9301, username="byid_dormant", title="ByIdDormant")
     db_session.add(ch)
     await db_session.commit()
-    db_session.add(ChannelSubscription(channel_id=ch.id, status="failed", ref_count=1))
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="dormant", ref_count=0))
     await db_session.commit()
 
     r = await async_client.post(f"/sources/{ch.id}", headers=_auth(uid))
-    assert r.status_code == 404
-    assert r.json()["error"]["code"] == "channel_not_available"
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["status"] == "queued"
+    row = (await db_session.execute(
+        text("SELECT kind, channel_username FROM channel_join_queue WHERE id = :id"),
+        {"id": body["queue_id"]},
+    )).mappings().one()
+    assert row["kind"] == "public_username"
+    assert row["channel_username"] == "byid_dormant"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_by_id_queues_left_channel(
+    async_client, db_session, seed_user
+) -> None:
+    """A legacy `left` subscription is reactivated through the queue too."""
+    uid = await seed_user(tg_user_id=231)
+    ch = Channel(tg_chat_id=9302, username="byid_left", title="ByIdLeft")
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="left", ref_count=0))
+    await db_session.commit()
+
+    r = await async_client.post(f"/sources/{ch.id}", headers=_auth(uid))
+    assert r.status_code == 202, r.text
+    assert r.json()["status"] == "queued"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_by_id_queues_dormant_private(
+    async_client, db_session, seed_user
+) -> None:
+    """A dormant private channel (no username, has invite_hash) is queued
+    as a private-invite join."""
+    uid = await seed_user(tg_user_id=232)
+    ch = Channel(
+        tg_chat_id=9303, username=None, title="ByIdPrivate",
+        invite_hash="privhash123",
+    )
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="dormant", ref_count=0))
+    await db_session.commit()
+
+    r = await async_client.post(f"/sources/{ch.id}", headers=_auth(uid))
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["status"] == "queued"
+    row = (await db_session.execute(
+        text("SELECT kind, invite_hash FROM channel_join_queue WHERE id = :id"),
+        {"id": body["queue_id"]},
+    )).mappings().one()
+    assert row["kind"] == "private_invite"
+    assert row["invite_hash"] == "privhash123"
 
 
 @pytest.mark.integration

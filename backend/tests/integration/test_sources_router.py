@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import text
 
 from shared.auth.jwt import encode_access
-from shared.models import Channel, UserHiddenChannel
+from shared.models import Channel, ChannelSubscription, UserHiddenChannel
 
 
 SECRET = "x" * 32
@@ -18,6 +18,8 @@ async def test_post_sources_existing_channel(async_client, db_session, seed_user
     user_id = await seed_user(tg_user_id=11)
     ch = Channel(tg_chat_id=22222, username="meduzaproject", title="Meduza")
     db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="active", ref_count=1))
     await db_session.commit()
 
     r = await async_client.post(
@@ -49,6 +51,8 @@ async def test_get_sources_returns_user_list(async_client, db_session, seed_user
     user_id = await seed_user(tg_user_id=13)
     ch = Channel(tg_chat_id=33333, username="newschan", title="News")
     db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="active", ref_count=1))
     await db_session.commit()
     await async_client.post("/sources", json={"input": "newschan"}, headers=_auth(user_id))
 
@@ -94,6 +98,8 @@ async def test_delete_source_decrements_ref(async_client, db_session, seed_user)
     ch = Channel(tg_chat_id=55555, username="byebye", title="Bye")
     db_session.add(ch)
     await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="active", ref_count=1))
+    await db_session.commit()
     await async_client.post("/sources", json={"input": "byebye"}, headers=_auth(user_id))
 
     r = await async_client.delete(f"/sources/{ch.id}", headers=_auth(user_id))
@@ -101,6 +107,104 @@ async def test_delete_source_decrements_ref(async_client, db_session, seed_user)
 
     rows = (await async_client.get("/sources", headers=_auth(user_id))).json()["items"]
     assert rows == []
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_dormant_channel_queues(
+    async_client, db_session, seed_user
+) -> None:
+    """Re-subscribing by username to a known-but-dormant channel goes
+    through the join queue so the ingester reactivates it (telegram-feed-iy7)."""
+    user_id = await seed_user(tg_user_id=420)
+    ch = Channel(tg_chat_id=42001, username="dormantchan", title="Dormant")
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(
+        ChannelSubscription(channel_id=ch.id, status="dormant", ref_count=0)
+    )
+    await db_session.commit()
+
+    r = await async_client.post(
+        "/sources", json={"input": "dormantchan"}, headers=_auth(user_id)
+    )
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["status"] == "queued"
+    row = (await db_session.execute(
+        text(
+            "SELECT kind, channel_username, status "
+            "FROM channel_join_queue WHERE id = :id"
+        ),
+        {"id": body["queue_id"]},
+    )).mappings().one()
+    assert row["kind"] == "public_username"
+    assert row["channel_username"] == "dormantchan"
+    assert row["status"] == "pending"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_dedup_returns_existing_queue_id(
+    async_client, db_session, seed_user
+) -> None:
+    """A second POST while the first join is still pending returns the
+    same queue_id — no duplicate channel_join_queue row."""
+    user_id = await seed_user(tg_user_id=421)
+    ch = Channel(tg_chat_id=42101, username="dedupchan", title="Dedup")
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(
+        ChannelSubscription(channel_id=ch.id, status="dormant", ref_count=0)
+    )
+    await db_session.commit()
+
+    r1 = await async_client.post(
+        "/sources", json={"input": "dedupchan"}, headers=_auth(user_id)
+    )
+    r2 = await async_client.post(
+        "/sources", json={"input": "dedupchan"}, headers=_auth(user_id)
+    )
+    assert r1.status_code == 202 and r2.status_code == 202, (r1.text, r2.text)
+    assert r1.json()["queue_id"] == r2.json()["queue_id"]
+    count = (await db_session.execute(
+        text("SELECT count(*) FROM channel_join_queue WHERE channel_username = :u"),
+        {"u": "dedupchan"},
+    )).scalar_one()
+    assert count == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_sources_dedup_is_per_user(
+    async_client, db_session, seed_user
+) -> None:
+    """Dedup is scoped per user: a different user re-subscribing to the
+    same dormant channel gets their own queue row, so their join (and
+    user_source link) is not dropped."""
+    uid_a = await seed_user(tg_user_id=422)
+    uid_b = await seed_user(tg_user_id=423)
+    ch = Channel(tg_chat_id=42201, username="multichan", title="Multi")
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(
+        ChannelSubscription(channel_id=ch.id, status="dormant", ref_count=0)
+    )
+    await db_session.commit()
+
+    r_a = await async_client.post(
+        "/sources", json={"input": "multichan"}, headers=_auth(uid_a)
+    )
+    r_b = await async_client.post(
+        "/sources", json={"input": "multichan"}, headers=_auth(uid_b)
+    )
+    assert r_a.status_code == 202 and r_b.status_code == 202, (r_a.text, r_b.text)
+    assert r_a.json()["queue_id"] != r_b.json()["queue_id"]
+    count = (await db_session.execute(
+        text("SELECT count(*) FROM channel_join_queue WHERE channel_username = :u"),
+        {"u": "multichan"},
+    )).scalar_one()
+    assert count == 2
 
 
 @pytest.mark.integration
