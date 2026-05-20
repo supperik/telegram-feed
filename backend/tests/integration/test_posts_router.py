@@ -82,6 +82,7 @@ async def test_unhide_post(async_client, db_session, seed_user) -> None:
     await db_session.commit()
     p = Post(channel_id=ch.id, tg_message_id=1, posted_at=datetime.now(tz=timezone.utc))
     db_session.add(p)
+    await db_session.commit()
     db_session.add(UserHiddenPost(user_id=uid, post_id=p.id))
     await db_session.commit()
 

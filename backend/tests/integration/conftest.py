@@ -35,6 +35,31 @@ async def _flush_redis_between_tests(redis_container):
     yield
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _truncate_postgres_between_tests(apply_migrations, pg_container):
+    # pg_container is session-scoped, so committed rows leak between tests —
+    # most visibly as uq_channels_username violations when two tests insert a
+    # Channel with the same hardcoded username. Truncate every data table
+    # (resetting identity sequences) before each test.
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(pg_container["async_url"], pool_pre_ping=True, future=True)
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT tablename FROM pg_tables "
+                    "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
+                )
+            )
+            tables = ", ".join(row[0] for row in result)
+            await conn.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+    finally:
+        await engine.dispose()
+    yield
+
+
 @pytest.fixture(scope="session", autouse=True)
 def apply_migrations(pg_container, redis_container):
     backend_dir = Path(__file__).resolve().parents[2]
