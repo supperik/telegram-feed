@@ -54,3 +54,15 @@ def test_alembic_upgrade_head(pg_container):
     assert head_revision in again.stdout, (
         f"alembic current ({again.stdout!r}) does not match head ({head_revision!r})"
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_user_read_posts_table_exists(db_session) -> None:
+    """0010 migration creates user_read_posts with the expected columns."""
+    from sqlalchemy import text
+
+    # Raises ProgrammingError (UndefinedTable/UndefinedColumn) if missing.
+    await db_session.execute(
+        text("SELECT user_id, post_id, read_at FROM user_read_posts WHERE false")
+    )
