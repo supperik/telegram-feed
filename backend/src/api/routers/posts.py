@@ -12,6 +12,7 @@ from shared.models import Post, User
 from shared.repositories.feed import (
     FeedPostRow,
     fetch_hidden_posts_page,
+    fetch_read_posts_page,
     fetch_saved_posts_page,
 )
 from shared.repositories.user_states import (
@@ -109,6 +110,24 @@ async def list_hidden(
         db,
         user_id=user.id,
         cursor_hidden_at=cursor_obj.sort_at,
+        cursor_post_id=cursor_obj.post_id,
+        limit=limit,
+    )
+    return _build_page(rows)
+
+
+@router.get("/read", response_model=FeedPage)
+async def list_read(
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FeedPage:
+    cursor_obj = PostListCursor.decode(cursor) if cursor else PostListCursor.initial()
+    rows = await fetch_read_posts_page(
+        db,
+        user_id=user.id,
+        cursor_read_at=cursor_obj.sort_at,
         cursor_post_id=cursor_obj.post_id,
         limit=limit,
     )

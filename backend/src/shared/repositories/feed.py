@@ -44,9 +44,10 @@ class FeedPostRow:
     channel_photo_storage_key: str | None
     channel_invite_hash: str | None
     is_saved: bool
-    # Populated by fetch_saved_posts_page / fetch_hidden_posts_page — the
-    # saved_at / hidden_at value used as the keyset sort key. None for the
-    # main feed (which sorts by posted_at and uses that directly).
+    # Populated by fetch_saved_posts_page / fetch_hidden_posts_page /
+    # fetch_read_posts_page — the saved_at / hidden_at / read_at value used as
+    # the keyset sort key. None for the main feed (which sorts by posted_at
+    # and uses that directly).
     sort_at: datetime | None = None
     media: list[FeedMediaRow] = field(default_factory=list)
 
@@ -232,6 +233,45 @@ async def fetch_hidden_posts_page(
             < tuple_(cursor_hidden_at, cursor_post_id),
         )
         .order_by(UserHiddenPost.hidden_at.desc(), Post.id.desc())
+        .limit(limit)
+    )
+    res = await session.execute(stmt)
+    rows = [
+        _row_to_feed_post(r, is_saved=bool(r.is_saved), sort_at=r.sort_at)
+        for r in res.all()
+    ]
+    await _attach_media(session, rows)
+    return rows
+
+
+async def fetch_read_posts_page(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    cursor_read_at: datetime,
+    cursor_post_id: int,
+    limit: int,
+) -> list[FeedPostRow]:
+    saved_q = exists().where(
+        and_(UserSavedPost.user_id == user_id, UserSavedPost.post_id == Post.id)
+    )
+    stmt = (
+        select(
+            *_post_and_channel_columns(),
+            saved_q.label("is_saved"),
+            UserReadPost.read_at.label("sort_at"),
+        )
+        .join(Channel, Channel.id == Post.channel_id)
+        .join(
+            UserReadPost,
+            and_(UserReadPost.post_id == Post.id, UserReadPost.user_id == user_id),
+        )
+        .where(
+            Channel.banned.is_(False),
+            tuple_(UserReadPost.read_at, Post.id)
+            < tuple_(cursor_read_at, cursor_post_id),
+        )
+        .order_by(UserReadPost.read_at.desc(), Post.id.desc())
         .limit(limit)
     )
     res = await session.execute(stmt)

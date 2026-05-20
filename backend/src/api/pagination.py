@@ -36,11 +36,11 @@ class FeedCursor:
 
 @dataclass(frozen=True)
 class PostListCursor:
-    """Keyset cursor for /posts/saved and /posts/hidden.
+    """Keyset cursor for /posts/saved, /posts/hidden and /posts/read.
 
-    Sort key is `(sort_at, post_id)` where sort_at is the saved_at or
-    hidden_at timestamp depending on the endpoint. Same encoding shape for
-    both — the endpoint knows which it asked for.
+    Sort key is `(sort_at, post_id)` where sort_at is the saved_at,
+    hidden_at or read_at timestamp depending on the endpoint. Same encoding
+    shape for all — the endpoint knows which it asked for.
     """
     sort_at: datetime
     post_id: int

@@ -209,3 +209,118 @@ async def test_saved_list_still_shows_read_posts(async_client, db_session, seed_
     r = await async_client.get("/posts/saved", headers=_auth(uid))
     assert r.status_code == 200
     assert [row["tg_message_id"] for row in r.json()["posts"]] == [1]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_read_posts_returns_newest_read_first(
+    async_client, db_session, seed_user
+) -> None:
+    uid = await seed_user(tg_user_id=61)
+    ch = Channel(tg_chat_id=110011, username="lro", title="LRO")
+    db_session.add(ch)
+    await db_session.commit()
+    base = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    p1 = Post(channel_id=ch.id, tg_message_id=1, posted_at=base)
+    p2 = Post(channel_id=ch.id, tg_message_id=2, posted_at=base + timedelta(seconds=1))
+    db_session.add_all([p1, p2])
+    await db_session.commit()
+    db_session.add(UserReadPost(user_id=uid, post_id=p1.id, read_at=base))
+    await db_session.commit()
+    db_session.add(
+        UserReadPost(user_id=uid, post_id=p2.id, read_at=base + timedelta(minutes=1))
+    )
+    await db_session.commit()
+
+    r = await async_client.get("/posts/read", headers=_auth(uid))
+    assert r.status_code == 200
+    body = r.json()
+    assert [p["tg_message_id"] for p in body["posts"]] == [2, 1]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_read_posts_paginates(async_client, db_session, seed_user) -> None:
+    uid = await seed_user(tg_user_id=62)
+    ch = Channel(tg_chat_id=110012, username="lrp", title="LRP")
+    db_session.add(ch)
+    await db_session.commit()
+    base = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    for i in range(3):
+        p = Post(channel_id=ch.id, tg_message_id=100 + i, posted_at=base + timedelta(minutes=i))
+        db_session.add(p)
+        await db_session.commit()
+        db_session.add(
+            UserReadPost(user_id=uid, post_id=p.id, read_at=base + timedelta(minutes=i))
+        )
+        await db_session.commit()
+
+    r = await async_client.get("/posts/read?limit=2", headers=_auth(uid))
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["posts"]) == 2
+    assert body["next_cursor"]
+
+    r2 = await async_client.get(
+        f"/posts/read?limit=2&cursor={body['next_cursor']}", headers=_auth(uid)
+    )
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert len(body2["posts"]) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_read_posts_annotates_is_saved(
+    async_client, db_session, seed_user
+) -> None:
+    uid = await seed_user(tg_user_id=63)
+    ch = Channel(tg_chat_id=110013, username="lris", title="LRIS")
+    db_session.add(ch)
+    await db_session.commit()
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    p1 = Post(channel_id=ch.id, tg_message_id=1, posted_at=base)
+    p2 = Post(channel_id=ch.id, tg_message_id=2, posted_at=base + timedelta(seconds=1))
+    db_session.add_all([p1, p2])
+    await db_session.commit()
+    db_session.add(UserReadPost(user_id=uid, post_id=p1.id, read_at=base))
+    db_session.add(
+        UserReadPost(user_id=uid, post_id=p2.id, read_at=base + timedelta(minutes=1))
+    )
+    db_session.add(UserSavedPost(user_id=uid, post_id=p1.id))
+    await db_session.commit()
+
+    r = await async_client.get("/posts/read", headers=_auth(uid))
+    assert r.status_code == 200
+    by_id = {p["tg_message_id"]: p for p in r.json()["posts"]}
+    assert by_id[1]["is_saved"] is True
+    assert by_id[2]["is_saved"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_read_bad_cursor_returns_400(async_client, seed_user) -> None:
+    uid = await seed_user(tg_user_id=64)
+    r = await async_client.get(
+        "/posts/read?cursor=not-base64-at-all!!", headers=_auth(uid)
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "bad_cursor"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_read_requires_auth(async_client) -> None:
+    r = await async_client.get("/posts/read")
+    assert r.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_read_posts_empty(async_client, seed_user) -> None:
+    uid = await seed_user(tg_user_id=65)
+    r = await async_client.get("/posts/read", headers=_auth(uid))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["posts"] == []
+    assert body["next_cursor"] is None
