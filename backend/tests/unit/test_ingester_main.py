@@ -37,11 +37,11 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
     async def _noop(*a, **kw): return None
 
     with patch("ingester.main.make_client", return_value=fake_client), \
-         patch("ingester.main.run_forever", side_effect=_noop), \
-         patch("ingester.main.run_join_worker", side_effect=_noop), \
-         patch("ingester.main.run_approval_poller", side_effect=_noop), \
-         patch("ingester.main.run_refcount_sweep", side_effect=_noop), \
-         patch("ingester.main.run_history_backfill", side_effect=_noop), \
+         patch("ingester.main.run_forever", autospec=True), \
+         patch("ingester.main.run_join_worker", autospec=True), \
+         patch("ingester.main.run_approval_poller", autospec=True), \
+         patch("ingester.main.run_refcount_sweep", autospec=True), \
+         patch("ingester.main.run_history_backfill", autospec=True), \
          patch("ingester.main.catchup_channels", side_effect=_noop), \
          patch("ingester.main.backfill_recent_media", side_effect=_noop), \
          patch("ingester.main.backfill_text_html", side_effect=_noop), \
@@ -78,11 +78,11 @@ def test_main_skips_history_backfill_when_disabled(monkeypatch):
     async def _noop(*a, **kw): return None
 
     with patch("ingester.main.make_client", return_value=fake_client), \
-         patch("ingester.main.run_forever", side_effect=_noop), \
-         patch("ingester.main.run_join_worker", side_effect=_noop), \
-         patch("ingester.main.run_approval_poller", side_effect=_noop), \
-         patch("ingester.main.run_refcount_sweep", side_effect=_noop), \
-         patch("ingester.main.run_history_backfill", side_effect=_noop) as fake_backfill, \
+         patch("ingester.main.run_forever", autospec=True), \
+         patch("ingester.main.run_join_worker", autospec=True), \
+         patch("ingester.main.run_approval_poller", autospec=True), \
+         patch("ingester.main.run_refcount_sweep", autospec=True), \
+         patch("ingester.main.run_history_backfill", autospec=True) as fake_backfill, \
          patch("ingester.main.catchup_channels", side_effect=_noop), \
          patch("ingester.main.backfill_recent_media", side_effect=_noop), \
          patch("ingester.main.backfill_text_html", side_effect=_noop), \

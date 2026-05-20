@@ -112,7 +112,7 @@ async def main() -> None:
                 poll_interval_s=settings.approval_poll_interval_s,
                 timeout_days=settings.approval_timeout_days,
             ),
-            run_refcount_sweep(client, session_factory),
+            run_refcount_sweep(session_factory, chat_map=chat_map),
             run_forever(),
         ]
         if settings.history_backfill_enabled:
