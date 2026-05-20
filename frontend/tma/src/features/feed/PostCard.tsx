@@ -37,7 +37,7 @@ export function PostCard({ post, actions = 'feed', readTracker }: Props) {
       <ChannelHeader channel={post.channel} postedAt={post.posted_at} />
       <PostText text={post.text} textHtml={post.text_html} />
       <MediaGallery media={post.media} channel={post.channel} tgMessageId={post.tg_message_id} />
-      <footer className="flex flex-wrap items-center gap-0.5 px-1.5 pb-2 pt-1">
+      <footer className="flex flex-wrap items-center gap-0.5 px-1.5 py-2">
         <SaveButton postId={post.id} isSaved={post.is_saved} />
         {actions === 'hidden' ? (
           <UnhideButton postId={post.id} />
