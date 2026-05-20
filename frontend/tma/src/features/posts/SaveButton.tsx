@@ -15,11 +15,12 @@ export function SaveButton({ postId, isSaved }: Props) {
       aria-label={isSaved ? 'Unsave post' : 'Save post'}
       aria-pressed={isSaved}
       onClick={() => mut.mutate({ postId, save: next })}
-      className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 py-2 text-[13px] transition active:bg-black/5 ${
+      className={`inline-flex flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] transition active:bg-black/5 ${
         isSaved ? 'text-link [&_svg]:fill-link' : 'text-hint'
       }`}
     >
       <BookmarkIcon size={17} />
+      <span>Сохранить</span>
     </button>
   );
 }

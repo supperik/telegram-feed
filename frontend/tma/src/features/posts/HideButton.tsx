@@ -12,9 +12,10 @@ export function HideButton({ postId }: Props) {
       type="button"
       aria-label="Hide post"
       onClick={() => mut.mutate(postId)}
-      className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 py-2 text-[13px] text-hint transition active:bg-black/5"
+      className="inline-flex flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] text-hint transition active:bg-black/5"
     >
       <EyeOffIcon size={17} />
+      <span>Скрыть</span>
     </button>
   );
 }

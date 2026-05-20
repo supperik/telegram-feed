@@ -52,9 +52,10 @@ describe('PostCard', () => {
     // The card no longer surfaces social-proof metrics: '100' was the views
     // count and would only appear via the (now removed) EyeIcon row.
     expect(container.textContent).not.toContain('100');
-    // '1' alone is too generic to assert directly, so we anchor on the absence
-    // of the share icon rendering for forwards.
-    expect(container.querySelectorAll('footer span').length).toBe(0);
+    // '1' alone is too generic to assert directly. Footer spans are now the
+    // Save/Hide action labels — none of them may carry a numeric count.
+    const footerSpans = Array.from(container.querySelectorAll('footer span'));
+    expect(footerSpans.every((s) => !/\d/.test(s.textContent ?? ''))).toBe(true);
   });
 
   it('renders "Open in Telegram" with t.me/<username>/<msg> href for a public channel', () => {
@@ -116,6 +117,12 @@ describe('PostCard', () => {
     const saved = { ...post, is_saved: true };
     render(<PostCard post={saved} />, { wrapper: wrap() });
     expect(screen.getByRole('button', { name: /unsave/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('renders "Сохранить" and "Скрыть" text labels under the action icons', () => {
+    render(<PostCard post={post} />, { wrapper: wrap() });
+    expect(screen.getByText('Сохранить')).toBeInTheDocument();
+    expect(screen.getByText('Скрыть')).toBeInTheDocument();
   });
 });
 
