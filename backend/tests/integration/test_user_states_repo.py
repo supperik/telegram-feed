@@ -86,7 +86,7 @@ async def test_unhide_post_is_idempotent(db_session, seed_user) -> None:
 @pytest.mark.asyncio
 async def test_unhide_channel_is_idempotent(db_session, seed_user) -> None:
     uid = await seed_user(tg_user_id=5101)
-    ch = Channel(tg_chat_id=91101, username="uh", title="UH")
+    ch = Channel(tg_chat_id=91101, username="uh_idem", title="UH")
     db_session.add(ch)
     await db_session.commit()
 
