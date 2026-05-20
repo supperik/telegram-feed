@@ -7,6 +7,7 @@ from ingester.approval_poller import run_approval_poller
 from ingester.backfill import backfill_recent_media
 from ingester.backfill_channel_photos import backfill_channel_photos
 from ingester.backfill_text_html import backfill_text_html
+from ingester.history_backfill import run_history_backfill
 from ingester.join_worker import run_join_worker
 from ingester.live import catchup_channels, subscribe_to_active_channels
 from ingester.merge_existing_albums import merge_existing_albums
@@ -97,7 +98,7 @@ async def main() -> None:
             bucket=settings.minio_bucket,
             settings=settings,
         )
-        await asyncio.gather(
+        workers = [
             run_join_worker(
                 client, session_factory,
                 minio_client=minio_client, bucket=settings.minio_bucket,
@@ -113,7 +114,16 @@ async def main() -> None:
             ),
             run_refcount_sweep(session_factory, chat_map=chat_map),
             run_forever(),
-        )
+        ]
+        if settings.history_backfill_enabled:
+            workers.append(
+                run_history_backfill(
+                    client, session_factory,
+                    minio_client=minio_client, bucket=settings.minio_bucket,
+                    settings=settings,
+                )
+            )
+        await asyncio.gather(*workers)
     finally:
         await client.disconnect()
         await engine.dispose()
