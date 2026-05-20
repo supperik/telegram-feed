@@ -12,6 +12,7 @@ from shared.models import (
     Post,
     UserHiddenChannel,
     UserHiddenPost,
+    UserReadPost,
     UserSavedPost,
     UserSource,
 )
@@ -130,6 +131,7 @@ async def fetch_feed_page(
     cursor_posted_at: datetime,
     cursor_post_id: int,
     limit: int,
+    include_read: bool = False,
 ) -> list[FeedPostRow]:
     saved_q = exists().where(
         and_(UserSavedPost.user_id == user_id, UserSavedPost.post_id == Post.id)
@@ -143,6 +145,18 @@ async def fetch_feed_page(
             UserHiddenChannel.channel_id == Post.channel_id,
         )
     )
+    read_post_q = exists().where(
+        and_(UserReadPost.user_id == user_id, UserReadPost.post_id == Post.id)
+    )
+
+    conditions = [
+        Channel.banned.is_(False),
+        ~hidden_post_q,
+        ~hidden_channel_q,
+        tuple_(Post.posted_at, Post.id) < tuple_(cursor_posted_at, cursor_post_id),
+    ]
+    if not include_read:
+        conditions.append(~read_post_q)
 
     stmt = (
         select(*_post_and_channel_columns(), saved_q.label("is_saved"))
@@ -151,12 +165,7 @@ async def fetch_feed_page(
             UserSource,
             and_(UserSource.channel_id == Post.channel_id, UserSource.user_id == user_id),
         )
-        .where(
-            Channel.banned.is_(False),
-            ~hidden_post_q,
-            ~hidden_channel_q,
-            tuple_(Post.posted_at, Post.id) < tuple_(cursor_posted_at, cursor_post_id),
-        )
+        .where(*conditions)
         .order_by(Post.posted_at.desc(), Post.id.desc())
         .limit(limit)
     )

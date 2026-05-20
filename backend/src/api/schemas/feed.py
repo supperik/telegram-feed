@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FeedMedia(BaseModel):
@@ -38,3 +38,11 @@ class FeedPost(BaseModel):
 class FeedPage(BaseModel):
     posts: list[FeedPost]
     next_cursor: str | None
+
+
+class ReadRequest(BaseModel):
+    post_ids: list[int] = Field(max_length=200)
+
+
+class ReadResponse(BaseModel):
+    marked: int

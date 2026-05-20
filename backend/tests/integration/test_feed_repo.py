@@ -95,3 +95,38 @@ async def test_feed_skips_hidden_channels_and_posts(db_session, seed_user) -> No
         limit=10,
     )
     assert [r.tg_message_id for r in page] == [1]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_feed_excludes_read_posts_by_default(db_session, seed_user) -> None:
+    from shared.models import UserReadPost
+
+    user_id = await seed_user(tg_user_id=23)
+    ch = Channel(tg_chat_id=70020, username="rd", title="RD")
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(UserSource(user_id=user_id, channel_id=ch.id))
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    p1 = Post(channel_id=ch.id, tg_message_id=1, text="unread", posted_at=base)
+    p2 = Post(channel_id=ch.id, tg_message_id=2, text="read", posted_at=base + timedelta(seconds=1))
+    db_session.add_all([p1, p2])
+    await db_session.commit()
+    db_session.add(UserReadPost(user_id=user_id, post_id=p2.id))
+    await db_session.commit()
+
+    far_future = datetime(9999, 12, 31, tzinfo=timezone.utc)
+    default_page = await fetch_feed_page(
+        db_session, user_id=user_id, cursor_posted_at=far_future, cursor_post_id=0, limit=10
+    )
+    assert [r.tg_message_id for r in default_page] == [1]
+
+    with_read = await fetch_feed_page(
+        db_session,
+        user_id=user_id,
+        cursor_posted_at=far_future,
+        cursor_post_id=0,
+        limit=10,
+        include_read=True,
+    )
+    assert [r.tg_message_id for r in with_read] == [2, 1]

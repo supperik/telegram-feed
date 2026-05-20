@@ -242,3 +242,108 @@ async def test_feed_returns_has_video_file_false_when_no_video_storage_key(
     assert len(media) == 1
     assert media[0]["type"] == "video"
     assert media[0]["has_video_file"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_mark_read_happy_path(async_client, db_session, seed_user) -> None:
+    user_id = await seed_user(tg_user_id=8101)
+    ch = Channel(tg_chat_id=80301, username="mr_a", title="MR")
+    db_session.add(ch)
+    await db_session.commit()
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    posts = [Post(channel_id=ch.id, tg_message_id=i + 1, posted_at=base) for i in range(3)]
+    db_session.add_all(posts)
+    await db_session.commit()
+    post_ids = [p.id for p in posts]
+
+    r = await async_client.post(
+        "/feed/read", json={"post_ids": post_ids}, headers=_auth(user_id)
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {"marked": 3}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_mark_read_duplicates_return_zero(async_client, db_session, seed_user) -> None:
+    user_id = await seed_user(tg_user_id=8102)
+    ch = Channel(tg_chat_id=80302, username="mr_b", title="MR")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=1, posted_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+
+    first = await async_client.post(
+        "/feed/read", json={"post_ids": [p.id]}, headers=_auth(user_id)
+    )
+    assert first.json() == {"marked": 1}
+    second = await async_client.post(
+        "/feed/read", json={"post_ids": [p.id]}, headers=_auth(user_id)
+    )
+    assert second.json() == {"marked": 0}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_mark_read_foreign_post_is_recorded(async_client, db_session, seed_user) -> None:
+    """A post the user is not subscribed to is still marked — no visibility check."""
+    user_id = await seed_user(tg_user_id=8103)
+    ch = Channel(tg_chat_id=80303, username="mr_c", title="MR")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=1, posted_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+
+    r = await async_client.post(
+        "/feed/read", json={"post_ids": [p.id]}, headers=_auth(user_id)
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {"marked": 1}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_mark_read_over_limit_returns_422(async_client, seed_user) -> None:
+    user_id = await seed_user(tg_user_id=8104)
+    r = await async_client.post(
+        "/feed/read", json={"post_ids": list(range(201))}, headers=_auth(user_id)
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_mark_read_requires_auth(async_client) -> None:
+    r = await async_client.post("/feed/read", json={"post_ids": [1]})
+    assert r.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_feed_hides_read_posts_and_include_read_shows_them(
+    async_client, db_session, seed_user
+) -> None:
+    user_id = await seed_user(tg_user_id=8201)
+    ch = Channel(tg_chat_id=80401, username="rdr", title="RDR")
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(UserSource(user_id=user_id, channel_id=ch.id))
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    p1 = Post(channel_id=ch.id, tg_message_id=1, posted_at=base)
+    p2 = Post(channel_id=ch.id, tg_message_id=2, posted_at=base + timedelta(seconds=1))
+    db_session.add_all([p1, p2])
+    await db_session.commit()
+
+    mark = await async_client.post(
+        "/feed/read", json={"post_ids": [p2.id]}, headers=_auth(user_id)
+    )
+    assert mark.status_code == 200, mark.text
+
+    r = await async_client.get("/feed", headers=_auth(user_id))
+    assert [p["tg_message_id"] for p in r.json()["posts"]] == [1]
+
+    r2 = await async_client.get("/feed?include_read=true", headers=_auth(user_id))
+    assert [p["tg_message_id"] for p in r2.json()["posts"]] == [2, 1]

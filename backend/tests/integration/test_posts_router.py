@@ -7,6 +7,7 @@ from shared.models import (
     Channel,
     Post,
     UserHiddenPost,
+    UserReadPost,
     UserSavedPost,
     UserSource,
 )
@@ -188,3 +189,23 @@ async def test_list_saved_bad_cursor_returns_400(async_client, seed_user) -> Non
     r = await async_client.get("/posts/saved?cursor=not-base64-at-all!!", headers=_auth(uid))
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "bad_cursor"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_saved_list_still_shows_read_posts(async_client, db_session, seed_user) -> None:
+    """Read filtering applies only to the main feed — Saved keeps read posts."""
+    uid = await seed_user(tg_user_id=60)
+    ch = Channel(tg_chat_id=110010, username="sr", title="SR")
+    db_session.add(ch)
+    await db_session.commit()
+    p = Post(channel_id=ch.id, tg_message_id=1, posted_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    db_session.add(p)
+    await db_session.commit()
+    db_session.add(UserSavedPost(user_id=uid, post_id=p.id))
+    db_session.add(UserReadPost(user_id=uid, post_id=p.id))
+    await db_session.commit()
+
+    r = await async_client.get("/posts/saved", headers=_auth(uid))
+    assert r.status_code == 200
+    assert [row["tg_message_id"] for row in r.json()["posts"]] == [1]
