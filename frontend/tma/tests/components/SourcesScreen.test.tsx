@@ -107,7 +107,7 @@ describe('SourcesScreen', () => {
     ).toBeTruthy();
   });
 
-  it('renders the "hidden from feed" section when API returns items', async () => {
+  it('shows a link to the hidden-sources page when there are hidden sources', async () => {
     authenticate();
     server.use(
       http.get(`${API_BASE}/sources`, () =>
@@ -136,8 +136,19 @@ describe('SourcesScreen', () => {
       ),
     );
     render(<SourcesScreen />, { wrapper: wrap() });
+    const link = await screen.findByRole('link', { name: /скрыты из ленты \(1\)/i });
+    expect(link).toHaveAttribute('href', '/sources/hidden');
+  });
+
+  it('does not show the hidden-sources link when there are no hidden sources', async () => {
+    authenticate();
+    emptyHandlers();
+    render(<SourcesScreen />, { wrapper: wrap() });
     await waitFor(() =>
-      expect(screen.getByText(/скрыты из ленты \(1\)/i)).toBeInTheDocument(),
+      expect(screen.getByText(/подключите первый канал/i)).toBeInTheDocument(),
     );
+    expect(
+      screen.queryByRole('link', { name: /скрыты из ленты/i }),
+    ).not.toBeInTheDocument();
   });
 });

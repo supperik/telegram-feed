@@ -1,6 +1,6 @@
+import { Link } from '@tanstack/react-router';
 import { AddSourceForm } from '@/features/sources/AddSourceForm';
 import { ChannelCatalogSection } from '@/features/sources/ChannelCatalogSection';
-import { HiddenSourcesSection } from '@/features/sources/HiddenSourcesSection';
 import { SourceListItem } from '@/features/sources/SourceListItem';
 import { useHiddenSources } from '@/features/sources/useHiddenSources';
 import { useSources } from '@/features/sources/useSources';
@@ -34,7 +34,17 @@ export function SourcesScreen() {
       <AddSourceForm />
 
       <section className="mx-3 mt-4">
-        <h2 className="mb-2 text-base font-semibold">Мои источники</h2>
+        <div className="mb-2 flex items-end justify-between">
+          <h2 className="text-base font-semibold">Мои источники</h2>
+          {hiddenCount > 0 ? (
+            <Link
+              to="/sources/hidden"
+              className="rounded-full bg-secondary px-3 py-1 text-xs text-hint"
+            >
+              Скрыты из ленты ({hiddenCount})
+            </Link>
+          ) : null}
+        </div>
         {totalCount === 0 ? (
           <EmptyState
             icon={<GridIcon />}
@@ -47,8 +57,6 @@ export function SourcesScreen() {
           </ul>
         ) : null}
       </section>
-
-      <HiddenSourcesSection />
 
       <ChannelCatalogSection />
     </div>
