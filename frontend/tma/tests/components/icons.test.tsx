@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HomeIcon, BookmarkIcon, GridIcon, RefreshIcon,
   EyeIcon, EyeOffIcon, ShareIcon, SendIcon,
-  MoreVerticalIcon, TrashIcon, AlertCircleIcon,
+  TrashIcon, AlertCircleIcon,
 } from '@/shared/ui/icons';
 
 describe('icons', () => {
@@ -11,7 +11,7 @@ describe('icons', () => {
     const icons = [
       HomeIcon, BookmarkIcon, GridIcon, RefreshIcon,
       EyeIcon, EyeOffIcon, ShareIcon, SendIcon,
-      MoreVerticalIcon, TrashIcon, AlertCircleIcon,
+      TrashIcon, AlertCircleIcon,
     ];
     for (const Icon of icons) {
       const { container, unmount } = render(<Icon />);

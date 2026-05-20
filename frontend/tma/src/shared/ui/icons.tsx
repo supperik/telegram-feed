@@ -69,13 +69,6 @@ export const SendIcon = makeIcon(
     <path d="M22 2L15 22l-4-9-9-4 20-7z" />
   </>,
 );
-export const MoreVerticalIcon = makeIcon(
-  <>
-    <circle cx="12" cy="5" r="1.5" />
-    <circle cx="12" cy="12" r="1.5" />
-    <circle cx="12" cy="19" r="1.5" />
-  </>,
-);
 export const TrashIcon = makeIcon(
   <>
     <path d="M3 6h18" />

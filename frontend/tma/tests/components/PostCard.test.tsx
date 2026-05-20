@@ -96,9 +96,9 @@ describe('PostCard', () => {
     expect(open).toHaveBeenCalledWith('https://t.me/meduza/42', '_blank', 'noopener,noreferrer');
   });
 
-  it('renders MoreVertical icon button in header', () => {
+  it('does not render a more-options button in the header anymore', () => {
     render(<PostCard post={post} />, { wrapper: wrap() });
-    expect(screen.getByRole('button', { name: /more options/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /more options/i })).toBeNull();
   });
 
   it('uses gradient avatar fallback when photo_url is null', () => {

@@ -1,11 +1,9 @@
 import type { ChannelSummary } from '@/shared/api/types';
 import { Avatar } from '@/shared/ui/Avatar';
-import { MoreVerticalIcon } from '@/shared/ui/icons';
 
 interface Props {
   channel: ChannelSummary;
   postedAt: string;
-  onMore?: () => void;
 }
 
 function formatPostedAt(iso: string): string {
@@ -17,7 +15,7 @@ function formatPostedAt(iso: string): string {
   return d.toLocaleDateString();
 }
 
-export function ChannelHeader({ channel, postedAt, onMore }: Props) {
+export function ChannelHeader({ channel, postedAt }: Props) {
   return (
     <header className="flex items-center gap-3 px-3.5 pt-3 pb-1.5">
       <Avatar photoUrl={channel.photo_url} title={channel.title} size={44} />
@@ -27,14 +25,6 @@ export function ChannelHeader({ channel, postedAt, onMore }: Props) {
           {channel.username ? `@${channel.username}` : '—'} · {formatPostedAt(postedAt)}
         </div>
       </div>
-      <button
-        type="button"
-        aria-label="More options"
-        onClick={onMore}
-        className="-mr-2 flex h-9 w-9 items-center justify-center rounded-full text-hint active:bg-black/5"
-      >
-        <MoreVerticalIcon size={20} />
-      </button>
     </header>
   );
 }
