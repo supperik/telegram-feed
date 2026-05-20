@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     rate_limit_sources_per_window: int = 30
     rate_limit_sources_window_seconds: int = 3600
 
+    # History backfill — lazy older-post fetch.
+    # See specs/2026-05-20-history-backfill-design.md.
+    history_backfill_enabled: bool = True
+    history_backfill_interval_s: int = 300
+    history_backfill_unread_threshold: int = 20
+    history_backfill_batch_size: int = 100
+    history_backfill_lock_ttl_s: int = 300
+    history_backfill_channels_per_tick: int = 20
+
     @property
     def postgres_dsn(self) -> str:
         return (
