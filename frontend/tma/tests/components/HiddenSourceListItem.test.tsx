@@ -43,7 +43,7 @@ describe('HiddenSourceListItem', () => {
   });
 
   it('Delete asks ConfirmDialog and skips on cancel', async () => {
-    vi.spyOn(ConfirmDialog, 'confirm').mockReturnValue(false);
+    vi.spyOn(ConfirmDialog, 'confirm').mockResolvedValue(false);
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(null, { status: 204 }));

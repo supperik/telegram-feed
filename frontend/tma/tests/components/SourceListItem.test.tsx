@@ -51,7 +51,7 @@ describe('SourceListItem', () => {
   });
 
   it('Delete asks ConfirmDialog and skips mutation on cancel', async () => {
-    vi.spyOn(ConfirmDialog, 'confirm').mockReturnValue(false);
+    vi.spyOn(ConfirmDialog, 'confirm').mockResolvedValue(false);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
     render(<SourceListItem item={item} />, { wrapper: wrap() });
     await userEvent.click(screen.getByRole('button', { name: /удалить/i }));
@@ -60,11 +60,13 @@ describe('SourceListItem', () => {
   });
 
   it('Delete with confirm=true mutates', async () => {
-    vi.spyOn(ConfirmDialog, 'confirm').mockReturnValue(true);
+    vi.spyOn(ConfirmDialog, 'confirm').mockResolvedValue(true);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
     render(<SourceListItem item={item} />, { wrapper: wrap() });
     await userEvent.click(screen.getByRole('button', { name: /удалить/i }));
-    expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/sources/7'), expect.objectContaining({ method: 'DELETE' }));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/sources/7'), expect.objectContaining({ method: 'DELETE' })),
+    );
   });
 
   it('renders LockIcon + "Приватный" for is_private=true', () => {
@@ -87,7 +89,7 @@ describe('SourceListItem', () => {
   });
 
   it('Delete invalidates the catalog query (so "Подписаться" appears without reload)', async () => {
-    vi.spyOn(ConfirmDialog, 'confirm').mockReturnValue(true);
+    vi.spyOn(ConfirmDialog, 'confirm').mockResolvedValue(true);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');

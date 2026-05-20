@@ -16,9 +16,9 @@ export function SourceListItem({ item }: Props) {
   const c = item.channel;
   const pending = item.subscription_status === 'pending_backfill';
 
-  const onDelete = () => {
+  const onDelete = async () => {
     const title = c.title || (c.username ? `@${c.username}` : 'канал');
-    if (ConfirmDialog.confirm(`Удалить канал «${title}» из подписок?`)) {
+    if (await ConfirmDialog.confirm(`Удалить канал «${title}» из подписок?`)) {
       remove.mutate(c.id);
     }
   };

@@ -15,9 +15,9 @@ export function HiddenSourceListItem({ item }: Props) {
   const remove = useRemoveSource();
   const c = item.channel;
 
-  const onDelete = () => {
+  const onDelete = async () => {
     const title = c.title || (c.username ? `@${c.username}` : 'канал');
-    if (ConfirmDialog.confirm(`Удалить канал «${title}» из подписок?`)) {
+    if (await ConfirmDialog.confirm(`Удалить канал «${title}» из подписок?`)) {
       remove.mutate(c.id);
     }
   };
