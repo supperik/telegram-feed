@@ -1,9 +1,8 @@
 import { Link } from '@tanstack/react-router';
-import { CatalogChannelItem } from '@/features/sources/CatalogChannelItem';
+import { AvailableCatalogRow } from '@/features/sources/AvailableCatalogRow';
 import {
   useChannelCatalog,
   useHideFromCatalog,
-  useSubscribeByChannelId,
 } from '@/features/sources/useChannelCatalog';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -12,7 +11,6 @@ import type { CatalogChannelItem as Item } from '@/shared/api/types';
 export function ChannelCatalogSection() {
   const available = useChannelCatalog('available');
   const hidden = useChannelCatalog('hidden');
-  const subscribe = useSubscribeByChannelId();
   const hide = useHideFromCatalog();
 
   const items: Item[] =
@@ -45,11 +43,9 @@ export function ChannelCatalogSection() {
       ) : (
         <ul className="overflow-hidden rounded-2xl bg-secondary shadow-card">
           {items.map((it) => (
-            <CatalogChannelItem
+            <AvailableCatalogRow
               key={it.channel.id}
               item={it}
-              actions="available"
-              onSubscribe={(id) => subscribe.mutate(id)}
               onHide={(id) => hide.mutate(id)}
             />
           ))}

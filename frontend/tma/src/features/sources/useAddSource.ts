@@ -42,7 +42,7 @@ interface AddSourceResult {
 
 const FALLBACK_MESSAGE = ERROR_MESSAGES.unknown ?? 'Не удалось добавить';
 
-function messageFor(errorCode: string | null | undefined): string {
+export function messageFor(errorCode: string | null | undefined): string {
   if (errorCode) {
     const localized = ERROR_MESSAGES[errorCode];
     if (localized) return localized;

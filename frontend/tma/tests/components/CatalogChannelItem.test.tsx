@@ -26,7 +26,13 @@ function makeItem(overrides: Partial<Item> = {}): Item {
 describe('CatalogChannelItem', () => {
   it('renders title and @username', () => {
     render(
-      <CatalogChannelItem item={makeItem()} actions="available" onSubscribe={vi.fn()} onHide={vi.fn()} />,
+      <CatalogChannelItem
+        item={makeItem()}
+        actions="available"
+        subscribeState={{ kind: 'idle' }}
+        onSubscribe={vi.fn()}
+        onHide={vi.fn()}
+      />,
       { wrapper: wrap() },
     );
     expect(screen.getByText('Meduza')).toBeInTheDocument();
@@ -40,6 +46,7 @@ describe('CatalogChannelItem', () => {
           channel: { id: 2, username: null, title: 'Privy', photo_url: null, is_private: true },
         })}
         actions="available"
+        subscribeState={{ kind: 'idle' }}
         onSubscribe={vi.fn()}
         onHide={vi.fn()}
       />,
@@ -53,6 +60,7 @@ describe('CatalogChannelItem', () => {
       <CatalogChannelItem
         item={makeItem({ is_subscribed: true })}
         actions="available"
+        subscribeState={{ kind: 'idle' }}
         onSubscribe={vi.fn()}
         onHide={vi.fn()}
       />,

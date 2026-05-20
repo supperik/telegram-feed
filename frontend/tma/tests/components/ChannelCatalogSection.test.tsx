@@ -42,6 +42,29 @@ function catalogHandler(byView: Record<'available' | 'hidden', unknown[]>) {
   });
 }
 
+const dormantChannel = {
+  id: 7,
+  username: 'dormant',
+  title: 'Dormant',
+  photo_url: null,
+  is_private: false,
+};
+
+/** Catalog with a single dormant, not-yet-subscribed channel (id 7). */
+const dormantCatalog = () =>
+  catalogHandler({
+    available: [
+      {
+        channel: dormantChannel,
+        subscribers_count: 0,
+        last_post_at: null,
+        is_subscribed: false,
+        is_hidden_from_catalog: false,
+      },
+    ],
+    hidden: [],
+  });
+
 describe('ChannelCatalogSection', () => {
   it('renders empty state when catalog is empty', async () => {
     authenticate();
@@ -84,5 +107,102 @@ describe('ChannelCatalogSection', () => {
     await waitFor(() =>
       expect(screen.getByText(/подписан/i)).toBeInTheDocument(),
     );
+  });
+
+  it('reflects queued status and polls the queue until a dormant channel becomes subscribed', async () => {
+    authenticate();
+    let polls = 0;
+    server.use(
+      dormantCatalog(),
+      http.post(`${API_BASE}/sources/7`, () =>
+        HttpResponse.json(
+          { status: 'queued', channel: null, queue_id: 42 },
+          { status: 202 },
+        ),
+      ),
+      http.get(`${API_BASE}/sources/queue/42`, () => {
+        polls += 1;
+        return HttpResponse.json({
+          queue_id: 42,
+          status: polls < 2 ? 'pending' : 'done',
+          error_code: null,
+          error_reason: null,
+          channel: dormantChannel,
+        });
+      }),
+    );
+    renderWithRouter();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /подписаться/i }),
+    );
+    // 202 queued — the row must surface the in-queue state, not stay "Подписаться".
+    expect(await screen.findByText('В очереди')).toBeInTheDocument();
+    // Polling /sources/queue/{id} resolves to done — the row flips to subscribed.
+    expect(
+      await screen.findByText('✓ Подписан', undefined, { timeout: 8000 }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a localized error when the queued join fails', async () => {
+    authenticate();
+    server.use(
+      dormantCatalog(),
+      http.post(`${API_BASE}/sources/7`, () =>
+        HttpResponse.json(
+          { status: 'queued', channel: null, queue_id: 9 },
+          { status: 202 },
+        ),
+      ),
+      http.get(`${API_BASE}/sources/queue/9`, () =>
+        HttpResponse.json({
+          queue_id: 9,
+          status: 'failed',
+          error_code: 'channels_too_much',
+          error_reason: null,
+          channel: null,
+        }),
+      ),
+    );
+    renderWithRouter();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /подписаться/i }),
+    );
+    expect(
+      await screen.findByText(/превышен лимит каналов/i, undefined, {
+        timeout: 8000,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the row waiting when the queued join needs channel-admin approval', async () => {
+    authenticate();
+    server.use(
+      dormantCatalog(),
+      http.post(`${API_BASE}/sources/7`, () =>
+        HttpResponse.json(
+          { status: 'queued', channel: null, queue_id: 5 },
+          { status: 202 },
+        ),
+      ),
+      http.get(`${API_BASE}/sources/queue/5`, () =>
+        HttpResponse.json({
+          queue_id: 5,
+          status: 'pending_approval',
+          error_code: null,
+          error_reason: null,
+          channel: null,
+        }),
+      ),
+    );
+    renderWithRouter();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /подписаться/i }),
+    );
+    expect(
+      await screen.findByText(/заявка отправлена админу/i, undefined, {
+        timeout: 8000,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Ждёт одобрения')).toBeInTheDocument();
   });
 });
