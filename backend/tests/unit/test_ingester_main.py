@@ -37,10 +37,11 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
     async def _noop(*a, **kw): return None
 
     with patch("ingester.main.make_client", return_value=fake_client), \
-         patch("ingester.main.run_forever", side_effect=_noop), \
-         patch("ingester.main.run_join_worker", side_effect=_noop), \
-         patch("ingester.main.run_approval_poller", side_effect=_noop), \
-         patch("ingester.main.run_refcount_sweep", side_effect=_noop), \
+         patch("ingester.main.run_forever", autospec=True), \
+         patch("ingester.main.run_join_worker", autospec=True), \
+         patch("ingester.main.run_approval_poller", autospec=True), \
+         patch("ingester.main.run_refcount_sweep", autospec=True), \
+         patch("ingester.main.run_history_backfill", autospec=True), \
          patch("ingester.main.catchup_channels", side_effect=_noop), \
          patch("ingester.main.backfill_recent_media", side_effect=_noop), \
          patch("ingester.main.backfill_text_html", side_effect=_noop), \
@@ -61,3 +62,41 @@ def test_main_connects_via_factory_and_disconnects(monkeypatch):
     fake_client.disconnect.assert_awaited_once()
     fake_engine.dispose.assert_awaited_once()
     fake_ensure.assert_called_once()
+
+
+def test_main_skips_history_backfill_when_disabled(monkeypatch):
+    _set_env(monkeypatch, TG_API_ID="12345", TG_API_HASH="deadbeef",
+             TG_PHONE="+10000000000", HISTORY_BACKFILL_ENABLED="false")
+    from shared.config import get_settings
+    get_settings.cache_clear()
+
+    fake_client = MagicMock()
+    fake_client.start = AsyncMock()
+    fake_client.disconnect = AsyncMock()
+    fake_client.get_me = AsyncMock(return_value=MagicMock(id=1, username="bot"))
+
+    async def _noop(*a, **kw): return None
+
+    with patch("ingester.main.make_client", return_value=fake_client), \
+         patch("ingester.main.run_forever", autospec=True), \
+         patch("ingester.main.run_join_worker", autospec=True), \
+         patch("ingester.main.run_approval_poller", autospec=True), \
+         patch("ingester.main.run_refcount_sweep", autospec=True), \
+         patch("ingester.main.run_history_backfill", autospec=True) as fake_backfill, \
+         patch("ingester.main.catchup_channels", side_effect=_noop), \
+         patch("ingester.main.backfill_recent_media", side_effect=_noop), \
+         patch("ingester.main.backfill_text_html", side_effect=_noop), \
+         patch("ingester.main.merge_existing_albums", side_effect=_noop), \
+         patch("ingester.main.backfill_channel_photos", side_effect=_noop), \
+         patch("ingester.main.subscribe_to_active_channels", side_effect=_noop), \
+         patch("ingester.main.make_storage_client") as fake_minio_factory, \
+         patch("ingester.main.ensure_bucket"), \
+         patch("ingester.main.make_engine") as fake_engine_factory:
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+        fake_engine_factory.return_value = fake_engine
+        fake_minio_factory.return_value = MagicMock()
+        from ingester.main import main
+        asyncio.run(main())
+
+    fake_backfill.assert_not_called()

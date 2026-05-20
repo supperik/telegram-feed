@@ -66,3 +66,18 @@ async def test_user_read_posts_table_exists(db_session) -> None:
     await db_session.execute(
         text("SELECT user_id, post_id, read_at FROM user_read_posts WHERE false")
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_channel_backfill_state_table_exists(db_session) -> None:
+    """0011 migration creates channel_backfill_state with the expected columns."""
+    from sqlalchemy import text
+
+    await db_session.execute(
+        text(
+            "SELECT channel_id, fully_backfilled, oldest_seen_msg_id, "
+            "last_backfill_at, locked_until "
+            "FROM channel_backfill_state WHERE false"
+        )
+    )
