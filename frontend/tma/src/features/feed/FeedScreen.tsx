@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useFeed } from '@/features/feed/useFeed';
+import { usePostRead } from '@/features/feed/usePostRead';
 import { PostCard } from '@/features/feed/PostCard';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -13,6 +14,7 @@ export function FeedScreen() {
   const {
     data, status, error, hasNextPage, isFetchingNextPage, fetchNextPage, refetch, isFetching,
   } = useFeed();
+  const readTracker = usePostRead();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function FeedScreen() {
         />
       ) : null}
 
-      {posts.map((p) => <PostCard key={p.id} post={p} />)}
+      {posts.map((p) => <PostCard key={p.id} post={p} readTracker={readTracker} />)}
 
       <div ref={sentinelRef} className="flex h-12 items-center justify-center">
         {isFetchingNextPage ? <Spinner /> : hasNextPage ? <span className="text-xs text-hint">Загружаем ещё…</span> : null}
