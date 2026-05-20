@@ -65,13 +65,19 @@ async def list_catalog_available(
             Channel.photo_storage_key,
             Channel.posts_count,
             Channel.last_post_at,
-            ChannelSubscription.ref_count.label("subscribers_count"),
+            func.coalesce(ChannelSubscription.ref_count, 0).label("subscribers_count"),
             is_sub.label("is_subscribed"),
         )
-        .join(ChannelSubscription, ChannelSubscription.channel_id == Channel.id)
+        # Outer join: catalog visibility does not depend on an active (or any)
+        # subscription — a swept channel must stay listed so the last
+        # unsubscriber can re-subscribe (telegram-feed-iy7).
+        .join(
+            ChannelSubscription,
+            ChannelSubscription.channel_id == Channel.id,
+            isouter=True,
+        )
         .where(
             Channel.banned.is_(False),
-            ChannelSubscription.status == "active",
             Channel.id.notin_(hidden_select),
             tuple_(Channel.posts_count, Channel.id)
             < tuple_(cursor.posts_count, cursor.channel_id),

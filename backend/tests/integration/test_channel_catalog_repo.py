@@ -35,31 +35,33 @@ async def _reset_catalog_dependent_rows(db_session):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_available_excludes_banned_inactive_and_hidden(
+async def test_list_available_excludes_banned_and_user_hidden(
     db_session, seed_user
 ) -> None:
+    """The catalog shows every non-banned channel the user hasn't hidden.
+    Subscription status no longer gates visibility — a swept channel must
+    stay listed so the last unsubscriber can re-subscribe (telegram-feed-iy7)."""
     uid = await seed_user(tg_user_id=101)
 
-    # active subscribed by someone — should appear
+    # active subscription — should appear
     ch_active = Channel(tg_chat_id=1001, username="cat_a", title="A", posts_count=10)
     # banned — must NOT appear
     ch_banned = Channel(
         tg_chat_id=1002, username="cat_b", title="B", banned=True, posts_count=5
     )
-    # inactive subscription — must NOT appear
-    ch_inactive = Channel(tg_chat_id=1003, username="cat_c", title="C", posts_count=3)
-    # ref_count == 0 orphan — MUST appear (no min-subscribers cutoff, so a user
-    # can re-subscribe via the catalog after being the last unsubscriber)
+    # dormant subscription (swept, no subscribers) — MUST appear
+    ch_dormant = Channel(tg_chat_id=1003, username="cat_c", title="C", posts_count=3)
+    # ref_count == 0 but still active — MUST appear
     ch_orphan = Channel(tg_chat_id=1004, username="cat_d", title="D", posts_count=2)
     # active but hidden by this user — must NOT appear
     ch_hidden = Channel(tg_chat_id=1005, username="cat_e", title="E", posts_count=20)
-    db_session.add_all([ch_active, ch_banned, ch_inactive, ch_orphan, ch_hidden])
+    db_session.add_all([ch_active, ch_banned, ch_dormant, ch_orphan, ch_hidden])
     await db_session.commit()
 
     db_session.add_all([
         ChannelSubscription(channel_id=ch_active.id, status="active", ref_count=2),
         ChannelSubscription(channel_id=ch_banned.id, status="active", ref_count=1),
-        ChannelSubscription(channel_id=ch_inactive.id, status="failed", ref_count=1),
+        ChannelSubscription(channel_id=ch_dormant.id, status="dormant", ref_count=0),
         ChannelSubscription(channel_id=ch_orphan.id, status="active", ref_count=0),
         ChannelSubscription(channel_id=ch_hidden.id, status="active", ref_count=1),
         UserCatalogHiddenChannel(user_id=uid, channel_id=ch_hidden.id),
@@ -73,8 +75,85 @@ async def test_list_available_excludes_banned_inactive_and_hidden(
         limit=50,
         q=None,
     )
-    # Sort: posts_count DESC, id DESC → ch_active (10), ch_orphan (2)
-    assert [r.channel_id for r in rows] == [ch_active.id, ch_orphan.id]
+    # Sort: posts_count DESC, id DESC → ch_active (10), ch_dormant (3), ch_orphan (2)
+    assert [r.channel_id for r in rows] == [
+        ch_active.id, ch_dormant.id, ch_orphan.id
+    ]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_includes_left_subscription(
+    db_session, seed_user
+) -> None:
+    """A legacy `left` subscription whose ref_count was bumped by a stuck
+    re-subscribe is still listed — subscribers_count reflects ref_count."""
+    uid = await seed_user(tg_user_id=130)
+    ch = Channel(tg_chat_id=13001, username="cat_left", title="Left", posts_count=4)
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="left", ref_count=1))
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        q=None,
+    )
+    assert [r.channel_id for r in rows] == [ch.id]
+    assert rows[0].subscribers_count == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_includes_dormant_subscription(
+    db_session, seed_user
+) -> None:
+    """A `dormant` subscription (swept after the last unsubscribe) stays
+    visible in the catalog."""
+    uid = await seed_user(tg_user_id=131)
+    ch = Channel(tg_chat_id=13101, username="cat_dorm", title="Dormant", posts_count=4)
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(
+        ChannelSubscription(channel_id=ch.id, status="dormant", ref_count=0)
+    )
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        q=None,
+    )
+    assert [r.channel_id for r in rows] == [ch.id]
+    assert rows[0].subscribers_count == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_includes_channel_without_subscription_row(
+    db_session, seed_user
+) -> None:
+    """A channel with no channel_subscriptions row at all is still listed,
+    with subscribers_count coalesced to 0."""
+    uid = await seed_user(tg_user_id=132)
+    ch = Channel(tg_chat_id=13201, username="cat_norow", title="NoRow", posts_count=4)
+    db_session.add(ch)
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        q=None,
+    )
+    assert [r.channel_id for r in rows] == [ch.id]
+    assert rows[0].subscribers_count == 0
 
 
 @pytest.mark.integration
