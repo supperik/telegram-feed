@@ -2,19 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { PostCard, type PostCardActions } from '@/features/feed/PostCard';
 import { useHiddenPosts } from '@/features/posts/useHiddenPosts';
+import { useReadPosts } from '@/features/posts/useReadPosts';
 import { useSavedPosts } from '@/features/posts/useSavedPosts';
 import type { FeedPage } from '@/shared/api/types';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Spinner } from '@/shared/ui/Spinner';
-import { BookmarkIcon, EyeOffIcon } from '@/shared/ui/icons';
+import { BookmarkIcon, EyeIcon, EyeOffIcon } from '@/shared/ui/icons';
 
-type Tab = 'saved' | 'hidden';
+type Tab = 'saved' | 'hidden' | 'read';
 
 export function SavedScreen() {
   const [tab, setTab] = useState<Tab>('saved');
   const saved = useSavedPosts();
   const hidden = useHiddenPosts();
+  const read = useReadPosts();
 
   return (
     <div>
@@ -27,6 +29,9 @@ export function SavedScreen() {
           <TabButton active={tab === 'hidden'} onClick={() => setTab('hidden')}>
             Скрытые
           </TabButton>
+          <TabButton active={tab === 'read'} onClick={() => setTab('read')}>
+            Просмотренные
+          </TabButton>
         </div>
       </header>
 
@@ -38,13 +43,21 @@ export function SavedScreen() {
           emptyTitle="Здесь будут сохранённые посты"
           emptyBody="Нажмите 🔖 в карточке поста, чтобы вернуться к нему позже."
         />
-      ) : (
+      ) : tab === 'hidden' ? (
         <PostList
           query={hidden}
           actions="hidden"
           emptyIcon={<EyeOffIcon />}
           emptyTitle="Скрытых постов нет"
           emptyBody="Когда вы скроете пост из ленты, он появится здесь — отсюда же можно его вернуть."
+        />
+      ) : (
+        <PostList
+          query={read}
+          actions="feed"
+          emptyIcon={<EyeIcon />}
+          emptyTitle="Просмотренных постов пока нет"
+          emptyBody="Посты, которые вы пролистали в ленте, собираются здесь — лента их больше не показывает."
         />
       )}
     </div>
