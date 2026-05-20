@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 
 @asynccontextmanager
@@ -8,33 +8,58 @@ async def _session_cm(session):
     yield session
 
 
-def test_sweep_leaves_channel_with_zero_refs():
+def _fake_session_factory(session):
+    sf = MagicMock()
+    sf.side_effect = lambda *a, **kw: _session_cm(session)
+    return sf
+
+
+def test_sweep_parks_zero_ref_channel_as_dormant():
+    """A channel with ref_count==0 and status=='active' is parked as
+    `dormant` — its subscription row is updated, no physical leave."""
     from ingester import refcount_sweep
 
     session = MagicMock()
     session.commit = AsyncMock()
     targets_result = MagicMock()
-    targets_result.all = MagicMock(return_value=[(7, -100)])
+    targets_result.all = MagicMock(return_value=[(7, 1234567890)])
     session.execute = AsyncMock(return_value=targets_result)
 
-    sf = MagicMock()
-    sf.side_effect = lambda *a, **kw: _session_cm(session)
+    sf = _fake_session_factory(session)
 
-    fake_client = MagicMock()
-    fake_client.get_entity = AsyncMock(return_value=MagicMock())
+    asyncio.run(refcount_sweep._sweep_once(sf))
 
-    async def _client_call(req):
-        return None
-    fake_client.side_effect = _client_call
+    # Two execute calls: SELECT targets + UPDATE subscription status.
+    assert session.execute.await_count == 2
+    update_stmt = session.execute.await_args_list[1].args[0]
+    compiled = str(update_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "dormant" in compiled
+    session.commit.assert_awaited()
 
-    with patch("ingester.refcount_sweep.LeaveChannelRequest", lambda e: ("leave", e)):
-        asyncio.run(refcount_sweep._sweep_once(fake_client, sf))
 
-    # Two execute calls: one SELECT (returned targets) + one UPDATE (status='left')
-    assert session.execute.await_count >= 2
+def test_sweep_removes_dormant_channel_from_chat_map():
+    """The swept channel's marked peer id is dropped from the live chat_map
+    so the ingester stops reading it immediately, without a restart."""
+    from ingester import refcount_sweep
+    from ingester.live import _to_marked_chat_id
+
+    session = MagicMock()
+    session.commit = AsyncMock()
+    targets_result = MagicMock()
+    targets_result.all = MagicMock(return_value=[(7, 1234567890)])
+    session.execute = AsyncMock(return_value=targets_result)
+
+    sf = _fake_session_factory(session)
+    marked = _to_marked_chat_id(1234567890)
+    chat_map = {marked: 7, 555: 1}
+
+    asyncio.run(refcount_sweep._sweep_once(sf, chat_map=chat_map))
+
+    assert chat_map == {555: 1}
 
 
 def test_sweep_noop_when_no_targets():
+    """No ref_count==0 channels → only the SELECT runs, chat_map untouched."""
     from ingester import refcount_sweep
 
     session = MagicMock()
@@ -43,12 +68,19 @@ def test_sweep_noop_when_no_targets():
     empty_result.all = MagicMock(return_value=[])
     session.execute = AsyncMock(return_value=empty_result)
 
-    sf = MagicMock()
-    sf.side_effect = lambda *a, **kw: _session_cm(session)
+    sf = _fake_session_factory(session)
+    chat_map = {555: 1}
 
-    fake_client = MagicMock()
-    fake_client.get_entity = AsyncMock()
+    asyncio.run(refcount_sweep._sweep_once(sf, chat_map=chat_map))
 
-    asyncio.run(refcount_sweep._sweep_once(fake_client, sf))
+    assert session.execute.await_count == 1
+    assert chat_map == {555: 1}
 
-    fake_client.get_entity.assert_not_called()
+
+def test_sweep_never_leaves_channel_physically():
+    """Regression guard: the sweep must not import the Telethon leave
+    request — parking a channel keeps the userbot a member."""
+    from ingester import refcount_sweep
+
+    assert not hasattr(refcount_sweep, "LeaveChannelRequest")
+    assert not hasattr(refcount_sweep, "PeerChannel")

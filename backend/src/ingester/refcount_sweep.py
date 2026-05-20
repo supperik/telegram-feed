@@ -1,36 +1,41 @@
-"""Periodic sweep: leave channels with no subscribers."""
+"""Periodic sweep: park channels with no subscribers as dormant.
+
+A channel with ref_count==0 keeps the userbot as a member — the sweep only
+flips the subscription to `dormant` and drops it from the live chat_map so
+the ingester stops reading it. Re-subscription reactivates the channel
+through the join queue (telegram-feed-iy7).
+"""
 import asyncio
 
 import structlog
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-from telethon import TelegramClient
-from telethon.tl.functions.channels import LeaveChannelRequest
-from telethon.tl.types import PeerChannel
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ingester.live import _to_marked_chat_id
 from shared.models import Channel, ChannelSubscription
 
 log = structlog.get_logger(__name__)
 
 
 async def run_refcount_sweep(
-    client: TelegramClient,
     session_factory: async_sessionmaker[AsyncSession],
     *,
     interval_s: float = 300.0,
+    chat_map: dict[int, int] | None = None,
 ) -> None:
     log.info("refcount_sweep.started", interval_s=interval_s)
     while True:
         try:
-            await _sweep_once(client, session_factory)
+            await _sweep_once(session_factory, chat_map=chat_map)
         except Exception as e:  # noqa: BLE001
             log.exception("refcount_sweep.error", error=str(e))
         await asyncio.sleep(interval_s)
 
 
 async def _sweep_once(
-    client: TelegramClient,
     session_factory: async_sessionmaker[AsyncSession],
+    *,
+    chat_map: dict[int, int] | None = None,
 ) -> None:
     async with session_factory() as session:
         res = await session.execute(
@@ -42,20 +47,15 @@ async def _sweep_once(
         targets = list(res.all())
 
     for channel_id, tg_chat_id in targets:
-        try:
-            # PeerChannel for unambiguous resolution after a cold restart; see 7h6.
-            entity = await client.get_entity(PeerChannel(tg_chat_id))
-            await client(LeaveChannelRequest(entity))
-        except Exception as e:  # noqa: BLE001
-            log.warning("refcount_sweep.leave_failed",
-                        channel_id=channel_id, error=str(e))
-            continue
-
         async with session_factory() as session:
             await session.execute(
                 update(ChannelSubscription)
                 .where(ChannelSubscription.channel_id == channel_id)
-                .values(status="left")
+                .values(status="dormant")
             )
             await session.commit()
-        log.info("refcount_sweep.left", channel_id=channel_id)
+        # Drop from the live chat_map so the NewMessage handler stops routing
+        # this channel's events at once, without waiting for a restart.
+        if chat_map is not None:
+            chat_map.pop(_to_marked_chat_id(tg_chat_id), None)
+        log.info("refcount_sweep.dormant", channel_id=channel_id)
