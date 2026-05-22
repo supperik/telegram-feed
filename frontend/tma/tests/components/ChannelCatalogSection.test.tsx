@@ -139,7 +139,7 @@ describe('ChannelCatalogSection', () => {
     expect(await screen.findByText('В очереди')).toBeInTheDocument();
     // Polling /sources/queue/{id} resolves to done — the row flips to subscribed.
     expect(
-      await screen.findByText('✓ Подписан', undefined, { timeout: 8000 }),
+      await screen.findByText('Подписан', undefined, { timeout: 8000 }),
     ).toBeInTheDocument();
   });
 

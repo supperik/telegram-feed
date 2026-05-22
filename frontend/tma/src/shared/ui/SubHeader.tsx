@@ -1,16 +1,15 @@
-import { ChevronLeftIcon } from './icons';
+import type { ReactNode } from 'react';
 
 interface Props {
   title: string;
-  onBack: () => void;
+  // The back affordance — pass a <Link className="back"> so it routes.
+  back: ReactNode;
 }
 
-export function SubHeader({ title, onBack }: Props) {
+export function SubHeader({ title, back }: Props) {
   return (
     <header className="tf-subhead">
-      <button type="button" className="back" aria-label="Назад" onClick={onBack}>
-        <ChevronLeftIcon size={16} />
-      </button>
+      {back}
       <h2>{title}</h2>
     </header>
   );

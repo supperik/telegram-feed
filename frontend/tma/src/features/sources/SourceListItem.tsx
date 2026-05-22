@@ -2,13 +2,14 @@ import { useHideSource } from '@/features/posts/usePostActions';
 import { useRemoveSource } from '@/features/sources/useSources';
 import { Avatar } from '@/shared/ui/Avatar';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
-import { IconButton } from '@/shared/ui/IconButton';
-import { EyeOffIcon, LockIcon, TrashIcon } from '@/shared/ui/icons';
+import { EyeOffIcon, LoaderIcon, LockIcon, TrashIcon } from '@/shared/ui/icons';
 import type { SourceListItem as Item } from '@/shared/api/types';
 
 interface Props {
   item: Item;
 }
+
+const LOCK_STYLE = { display: 'inline-flex', color: 'var(--hint)' } as const;
 
 export function SourceListItem({ item }: Props) {
   const remove = useRemoveSource();
@@ -24,29 +25,47 @@ export function SourceListItem({ item }: Props) {
   };
 
   return (
-    <li className="flex items-center gap-3 border-b border-black/10 px-3 py-2.5 last:border-b-0">
+    <div className="tf-row">
       <Avatar photoUrl={c.photo_url} title={c.title} size={40} />
-      <div className="min-w-0 flex-1 leading-tight">
-        <div className="truncate text-[14.5px] font-semibold">{c.title}</div>
-        <div className={`mt-0.5 truncate text-xs ${pending ? 'text-[#b45309]' : 'text-hint'}`}>
+      <div className="meta">
+        <div className="title">
+          {c.title}
           {c.is_private ? (
-            <span className="inline-flex items-center gap-1">
-              <LockIcon size={12} /> Приватный
+            <span style={LOCK_STYLE}>
+              <LockIcon size={11} />
             </span>
-          ) : c.username ? (
-            `@${c.username}`
-          ) : (
-            '—'
-          )}
-          {pending ? ' · подгружаем…' : null}
+          ) : null}
+        </div>
+        <div className={`sub${pending ? ' is-warn' : ''}`}>
+          <span>{c.is_private ? 'Приватный' : c.username ? `@${c.username}` : '—'}</span>
+          {pending ? (
+            <>
+              <span className="dot" />
+              <LoaderIcon className="tf-spin" size={11} />
+              <span>подгружаем…</span>
+            </>
+          ) : null}
         </div>
       </div>
-      <IconButton aria-label="Скрыть" size={32} onClick={() => hide.mutate(item)}>
-        <EyeOffIcon size={16} />
-      </IconButton>
-      <IconButton aria-label="Удалить" size={32} variant="danger" onClick={onDelete}>
-        <TrashIcon size={16} />
-      </IconButton>
-    </li>
+      <div className="controls">
+        <button
+          type="button"
+          className="iconbtn"
+          aria-label="Скрыть из ленты"
+          onClick={() => hide.mutate(item)}
+        >
+          <EyeOffIcon size={15} />
+        </button>
+        <button
+          type="button"
+          className="iconbtn"
+          data-variant="danger"
+          aria-label="Удалить"
+          onClick={onDelete}
+        >
+          <TrashIcon size={15} />
+        </button>
+      </div>
+    </div>
   );
 }

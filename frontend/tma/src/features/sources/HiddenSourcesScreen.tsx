@@ -1,36 +1,49 @@
 import { Link } from '@tanstack/react-router';
 import { HiddenSourceListItem } from '@/features/sources/HiddenSourceListItem';
 import { useHiddenSources } from '@/features/sources/useHiddenSources';
+import { SubHeader } from '@/shared/ui/SubHeader';
 import { Spinner } from '@/shared/ui/Spinner';
+import { ChevronLeftIcon } from '@/shared/ui/icons';
+
+const NOTE_STYLE = {
+  color: 'var(--hint)',
+  font: '500 12px/1.5 var(--font-ui)',
+  textAlign: 'center',
+  padding: '12px 18px',
+} as const;
 
 export function HiddenSourcesScreen() {
   const hidden = useHiddenSources();
   const items = hidden.data?.items ?? [];
 
   return (
-    <div>
-      <header className="flex items-center gap-2 px-4 pt-3 pb-2">
-        <Link to="/sources" className="text-link text-sm">
-          ← К источникам
-        </Link>
-        <h1 className="ml-1 text-base font-semibold">Скрыты из ленты</h1>
-      </header>
-
+    <>
+      <SubHeader
+        title="Скрыты из ленты"
+        back={
+          <Link to="/sources" className="back" aria-label="К источникам">
+            <ChevronLeftIcon size={16} />
+          </Link>
+        }
+      />
       {hidden.status === 'pending' ? (
-        <div className="flex items-center justify-center py-6">
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
           <Spinner />
         </div>
       ) : items.length === 0 ? (
-        <div className="mx-3 rounded-2xl bg-secondary px-4 py-8 text-center text-xs text-hint">
-          Нет скрытых каналов.
-        </div>
+        <p style={{ ...NOTE_STYLE, padding: '24px 18px', fontSize: 13 }}>Нет скрытых каналов.</p>
       ) : (
-        <ul className="mx-3 overflow-hidden rounded-2xl bg-secondary shadow-card">
-          {items.map((i) => (
-            <HiddenSourceListItem key={i.channel.id} item={i} />
-          ))}
-        </ul>
+        <>
+          <div className="tf-list" style={{ marginTop: 8 }}>
+            {items.map((i) => (
+              <HiddenSourceListItem key={i.channel.id} item={i} />
+            ))}
+          </div>
+          <p style={NOTE_STYLE}>
+            Каналы остаются в подписках, но их посты не появляются в ленте.
+          </p>
+        </>
       )}
-    </div>
+    </>
   );
 }

@@ -1,14 +1,10 @@
-import { ChevronRightIcon } from './icons';
-
-interface SectionAction {
-  label: string;
-  onClick: () => void;
-}
+import type { ReactNode } from 'react';
 
 interface Props {
   title: string;
   count?: number;
-  action?: SectionAction;
+  // A pill-styled link/button — pass an element with className="link".
+  action?: ReactNode;
 }
 
 export function SectionHead({ title, count, action }: Props) {
@@ -18,12 +14,7 @@ export function SectionHead({ title, count, action }: Props) {
         {title}
         {count != null ? <span className="count">{count}</span> : null}
       </h2>
-      {action ? (
-        <button type="button" className="link" onClick={action.onClick}>
-          {action.label}
-          <ChevronRightIcon size={11} />
-        </button>
-      ) : null}
+      {action ?? null}
     </div>
   );
 }

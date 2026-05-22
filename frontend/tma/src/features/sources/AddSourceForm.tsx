@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAddSource } from '@/features/sources/useAddSource';
+import { AlertCircleIcon, CheckIcon, ClockIcon, LoaderIcon, PlusIcon } from '@/shared/ui/icons';
 
 /**
  * Loose client-side sanity check only — actual parsing (username vs invite link)
@@ -8,6 +9,17 @@ import { useAddSource } from '@/features/sources/useAddSource';
  */
 const SANITY_RE = /^[\sA-Za-z0-9@_+\-/:.]+$/;
 const MAX_LEN = 256;
+
+const HINT_STYLE = { display: 'inline-flex', alignItems: 'center', gap: 4 } as const;
+const RESET_BTN = {
+  ...HINT_STYLE,
+  cursor: 'pointer',
+  background: 'none',
+  border: 0,
+  padding: 0,
+  font: 'inherit',
+  color: 'inherit',
+} as const;
 
 export function AddSourceForm() {
   const [value, setValue] = useState('');
@@ -20,55 +32,61 @@ export function AddSourceForm() {
     submit(cleaned);
   };
 
-  const disabled =
+  const busy =
     state.kind === 'submitting' || state.kind === 'queued' || state.kind === 'pending_approval';
 
   return (
-    <div className="mx-3 mt-3 rounded-2xl bg-secondary p-3 shadow-card">
-      <div className="flex items-center gap-2">
+    <>
+      <div className="tf-addcard">
+        <PlusIcon size={16} />
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="@username или t.me/+..."
-          className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-hint"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
         />
-        <button
-          type="button"
-          onClick={handle}
-          disabled={disabled}
-          className="shrink-0 rounded-full bg-button px-4 py-2 text-[13px] font-semibold text-button-text transition active:opacity-90 disabled:opacity-45"
-        >
+        <button type="button" onClick={handle} disabled={busy}>
           {state.kind === 'submitting' ? '…' : 'Подписаться'}
         </button>
       </div>
-      <div className="mt-1 px-1 text-xs text-hint">Публичные и приватные каналы</div>
-      <div className="mt-2 px-1 text-xs">
+      <div
+        className={
+          'tf-addhint' +
+          (state.kind === 'pending_approval' ? ' is-warn' : '') +
+          (state.kind === 'subscribed' ? ' is-success' : '') +
+          (state.kind === 'failed' ? ' is-danger' : '')
+        }
+      >
+        {state.kind === 'idle' || state.kind === 'submitting' ? (
+          <span>Публичные и приватные каналы</span>
+        ) : null}
         {state.kind === 'queued' ? (
-          <span className="text-hint" role="status" aria-live="polite">
+          <span role="status" aria-live="polite" style={HINT_STYLE}>
+            <LoaderIcon className="tf-spin" size={12} />
             Запрос принят, добавляем…
           </span>
         ) : null}
         {state.kind === 'pending_approval' ? (
-          <span className="text-hint" role="status" aria-live="polite">
+          <span role="status" aria-live="polite" style={HINT_STYLE}>
+            <ClockIcon size={12} />
             Заявка отправлена админу канала. Подписка появится в списке, как только админ одобрит.
           </span>
         ) : null}
         {state.kind === 'subscribed' ? (
-          <button
-            type="button"
-            className="text-link"
-            onClick={() => { setValue(''); reset(); }}
-          >
+          <button type="button" style={RESET_BTN} onClick={() => { setValue(''); reset(); }}>
+            <CheckIcon size={12} />
             Готово — добавить ещё канал
           </button>
         ) : null}
         {state.kind === 'failed' ? (
-          <span className="text-danger" role="alert">{state.message}</span>
+          <span role="alert" style={HINT_STYLE}>
+            <AlertCircleIcon size={12} />
+            {state.message}
+          </span>
         ) : null}
       </div>
-    </div>
+    </>
   );
 }

@@ -1010,6 +1010,15 @@
 }
 .tf-cattile .hide-btn:hover { background: var(--surface-2); color: var(--text); }
 
+/* Subscribe status / error line under a catalog tile's CTA */
+.tf-cattile-msg {
+  margin: 0;
+  padding: 0 10px 10px;
+  font: 500 11px/1.35 var(--font-ui);
+  color: var(--hint);
+}
+.tf-cattile-msg.is-danger { color: var(--danger); }
+
 /* ── Empty state ── */
 .tf-empty {
   margin: 20px 18px;

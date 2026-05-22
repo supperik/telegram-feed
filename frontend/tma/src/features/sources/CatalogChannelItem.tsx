@@ -1,7 +1,14 @@
 import { Avatar } from '@/shared/ui/Avatar';
-import { Button } from '@/shared/ui/Button';
-import { IconButton } from '@/shared/ui/IconButton';
-import { LockIcon, TrashIcon } from '@/shared/ui/icons';
+import {
+  CheckIcon,
+  ClockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LoaderIcon,
+  LockIcon,
+  PlusIcon,
+  UsersIcon,
+} from '@/shared/ui/icons';
 import type { SubscribeState } from '@/features/sources/useChannelCatalog';
 import type { CatalogChannelItem as Item } from '@/shared/api/types';
 
@@ -21,108 +28,155 @@ interface HiddenProps {
 
 type Props = AvailableProps | HiddenProps;
 
-const PILL = 'rounded-full bg-secondary px-3 py-1.5 text-[13px] text-hint';
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')}M`;
+  if (n >= 1000) return `${Math.round(n / 1000)}K`;
+  return String(n);
+}
+
+function fmtLastPost(iso: string): string {
+  const sec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (sec < 3600) return `${Math.max(1, Math.floor(sec / 60))} мин`;
+  if (sec < 86_400) return `${Math.floor(sec / 3600)} ч`;
+  if (sec < 7 * 86_400) return `${Math.floor(sec / 86_400)} дн`;
+  return new Date(iso).toLocaleDateString();
+}
+
+const HANDLE_PRIVATE = { display: 'inline-flex', alignItems: 'center', gap: 4 } as const;
 
 export function CatalogChannelItem(props: Props) {
   const c = props.item.channel;
+  const hue = ((c.username ?? c.title ?? '?').charCodeAt(0) * 23) % 360;
   return (
-    <li className="border-b border-black/10 last:border-b-0">
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        <Avatar photoUrl={c.photo_url} title={c.title} size={40} />
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[14.5px] font-semibold">{c.title}</div>
-          <div className="mt-0.5 truncate text-xs text-hint">
-            {c.is_private ? (
-              <span className="inline-flex items-center gap-1">
-                <LockIcon size={12} /> Приватный
-              </span>
-            ) : c.username ? (
-              `@${c.username}`
-            ) : (
-              '—'
-            )}
-          </div>
+    <div className="tf-cattile">
+      <div
+        className="banner"
+        style={{
+          background: `linear-gradient(135deg, oklch(0.45 0.1 ${hue}), oklch(0.28 0.06 ${(hue + 60) % 360}))`,
+        }}
+      >
+        <div className="av-frame">
+          <Avatar photoUrl={c.photo_url} title={c.title} size={38} />
         </div>
-        {props.actions === 'available' ? (
-          <>
-            <SubscribeAction
-              item={props.item}
-              state={props.subscribeState}
-              onSubscribe={props.onSubscribe}
-            />
-            <IconButton
-              aria-label="Скрыть из каталога"
-              size={32}
-              onClick={() => props.onHide(c.id)}
-            >
-              <TrashIcon size={16} />
-            </IconButton>
-          </>
-        ) : (
-          <Button
-            onClick={() => props.onUnhide(c.id)}
-            className="rounded-full px-4 py-2 text-[13px] font-semibold"
-          >
-            ⤴ Вернуть
-          </Button>
-        )}
+      </div>
+      <div className="body">
+        <div className="name">{c.title}</div>
+        <div className="handle">
+          {c.is_private ? (
+            <span style={HANDLE_PRIVATE}>
+              <LockIcon size={10} /> Приватный
+            </span>
+          ) : c.username ? (
+            `@${c.username}`
+          ) : (
+            '—'
+          )}
+        </div>
+        <div className="stats">
+          <UsersIcon size={11} />
+          <span>{fmtNum(props.item.subscribers_count)}</span>
+          {props.item.last_post_at ? (
+            <>
+              <span className="pip" />
+              <ClockIcon size={11} />
+              <span>{fmtLastPost(props.item.last_post_at)}</span>
+            </>
+          ) : null}
+        </div>
       </div>
       {props.actions === 'available' ? (
-        <SubscribeStatusLine state={props.subscribeState} />
-      ) : null}
-    </li>
+        <AvailableCta
+          item={props.item}
+          state={props.subscribeState}
+          onSubscribe={props.onSubscribe}
+          onHide={() => props.onHide(c.id)}
+        />
+      ) : (
+        <div className="cta">
+          <button
+            type="button"
+            className="sub-btn"
+            data-state="subscribed"
+            onClick={() => props.onUnhide(c.id)}
+          >
+            <EyeIcon size={13} /> Вернуть в каталог
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
-function SubscribeAction({
+function AvailableCta({
   item,
   state,
   onSubscribe,
+  onHide,
 }: {
   item: Item;
   state: SubscribeState;
   onSubscribe: () => void;
+  onHide: () => void;
 }) {
-  if (item.is_subscribed || state.kind === 'subscribed') {
-    return <span className={PILL}>✓ Подписан</span>;
-  }
-  if (state.kind === 'submitting' || state.kind === 'queued') {
-    return <span className={PILL}>В очереди</span>;
-  }
-  if (state.kind === 'pending_approval') {
-    return <span className={PILL}>Ждёт одобрения</span>;
-  }
-  return (
-    <Button
-      onClick={onSubscribe}
-      className="rounded-full px-4 py-2 text-[13px] font-semibold"
-    >
-      + Подписаться
-    </Button>
-  );
-}
+  const subscribed = item.is_subscribed || state.kind === 'subscribed';
+  const queued = state.kind === 'submitting' || state.kind === 'queued';
+  const pending = state.kind === 'pending_approval';
 
-function SubscribeStatusLine({ state }: { state: SubscribeState }) {
-  if (state.kind === 'queued') {
-    return (
-      <p className="px-3 pb-2 text-xs text-hint" role="status" aria-live="polite">
-        Запрос принят, добавляем…
-      </p>
+  let btn;
+  if (subscribed) {
+    btn = (
+      <button type="button" className="sub-btn" data-state="subscribed" disabled>
+        <CheckIcon size={13} /> Подписан
+      </button>
+    );
+  } else if (queued) {
+    btn = (
+      <button type="button" className="sub-btn" data-state="queued" disabled>
+        <LoaderIcon className="tf-spin" size={13} /> В очереди
+      </button>
+    );
+  } else if (pending) {
+    btn = (
+      <button type="button" className="sub-btn" data-state="pending" disabled>
+        <ClockIcon size={13} /> Ждёт одобрения
+      </button>
+    );
+  } else {
+    btn = (
+      <button type="button" className="sub-btn" onClick={onSubscribe}>
+        <PlusIcon size={14} /> Подписаться
+      </button>
     );
   }
-  if (state.kind === 'pending_approval') {
-    return (
-      <p className="px-3 pb-2 text-xs text-hint" role="status" aria-live="polite">
-        Заявка отправлена админу канала. Подписка появится, когда он одобрит.
-      </p>
-    );
-  }
-  if (state.kind === 'failed') {
-    return (
-      <p className="px-3 pb-2 text-xs text-danger" role="alert">
-        {state.message}
-      </p>
-    );
-  }
-  return null;
+
+  return (
+    <>
+      <div className="cta">
+        {btn}
+        <button
+          type="button"
+          className="hide-btn"
+          aria-label="Скрыть из каталога"
+          onClick={onHide}
+        >
+          <EyeOffIcon size={14} />
+        </button>
+      </div>
+      {state.kind === 'queued' ? (
+        <p className="tf-cattile-msg" role="status" aria-live="polite">
+          Запрос принят, добавляем…
+        </p>
+      ) : null}
+      {state.kind === 'pending_approval' ? (
+        <p className="tf-cattile-msg" role="status" aria-live="polite">
+          Заявка отправлена админу канала. Подписка появится, когда он одобрит.
+        </p>
+      ) : null}
+      {state.kind === 'failed' ? (
+        <p className="tf-cattile-msg is-danger" role="alert">
+          {state.message}
+        </p>
+      ) : null}
+    </>
+  );
 }

@@ -1,11 +1,10 @@
 import { Link } from '@tanstack/react-router';
 import { CatalogChannelItem } from '@/features/sources/CatalogChannelItem';
-import {
-  useChannelCatalog,
-  useUnhideFromCatalog,
-} from '@/features/sources/useChannelCatalog';
+import { useChannelCatalog, useUnhideFromCatalog } from '@/features/sources/useChannelCatalog';
 import { Button } from '@/shared/ui/Button';
+import { SubHeader } from '@/shared/ui/SubHeader';
 import { Spinner } from '@/shared/ui/Spinner';
+import { ChevronLeftIcon } from '@/shared/ui/icons';
 import type { CatalogChannelItem as Item } from '@/shared/api/types';
 
 export function HiddenCatalogScreen() {
@@ -14,22 +13,32 @@ export function HiddenCatalogScreen() {
   const items: Item[] = hidden.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
-    <div>
-      <header className="flex items-center gap-2 px-4 pt-3 pb-2">
-        <Link to="/sources" className="text-link text-sm">
-          ← К источникам
-        </Link>
-        <h1 className="ml-1 text-base font-semibold">Скрытые из каталога</h1>
-      </header>
-
+    <>
+      <SubHeader
+        title="Скрытые из каталога"
+        back={
+          <Link to="/sources" className="back" aria-label="К источникам">
+            <ChevronLeftIcon size={16} />
+          </Link>
+        }
+      />
       {hidden.status === 'pending' ? (
-        <div className="flex items-center justify-center py-6"><Spinner /></div>
-      ) : items.length === 0 ? (
-        <div className="mx-3 rounded-2xl bg-secondary px-4 py-8 text-center text-xs text-hint">
-          Нет скрытых каналов.
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+          <Spinner />
         </div>
+      ) : items.length === 0 ? (
+        <p
+          style={{
+            color: 'var(--hint)',
+            font: '500 13px/1.5 var(--font-ui)',
+            textAlign: 'center',
+            padding: '24px 18px',
+          }}
+        >
+          Нет скрытых каналов.
+        </p>
       ) : (
-        <ul className="mx-3 overflow-hidden rounded-2xl bg-secondary shadow-card">
+        <div className="tf-catgrid" style={{ marginTop: 8 }}>
           {items.map((it) => (
             <CatalogChannelItem
               key={it.channel.id}
@@ -38,20 +47,19 @@ export function HiddenCatalogScreen() {
               onUnhide={(id) => unhide.mutate(id)}
             />
           ))}
-        </ul>
+        </div>
       )}
-
       {hidden.hasNextPage ? (
-        <div className="mt-2 flex justify-center">
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
           <Button
+            variant="secondary"
             onClick={() => hidden.fetchNextPage()}
             disabled={hidden.isFetchingNextPage}
-            className="rounded-full bg-secondary px-4 py-2 text-[13px] text-hint"
           >
             {hidden.isFetchingNextPage ? '…' : 'Показать ещё'}
           </Button>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
