@@ -1,16 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { PostCard, type PostCardActions } from '@/features/feed/PostCard';
 import { useHiddenPosts } from '@/features/posts/useHiddenPosts';
 import { useReadPosts } from '@/features/posts/useReadPosts';
 import { useSavedPosts } from '@/features/posts/useSavedPosts';
 import type { FeedPage } from '@/shared/api/types';
-import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
+import { PillTabs } from '@/shared/ui/PillTabs';
 import { Spinner } from '@/shared/ui/Spinner';
-import { BookmarkIcon, EyeIcon, EyeOffIcon } from '@/shared/ui/icons';
+import { AlertCircleIcon, BookmarkIcon, EyeIcon, EyeOffIcon } from '@/shared/ui/icons';
 
 type Tab = 'saved' | 'hidden' | 'read';
+
+const TABS = [
+  { id: 'saved', label: 'Сохранённые' },
+  { id: 'hidden', label: 'Скрытые' },
+  { id: 'read', label: 'Просмотренные' },
+];
 
 export function SavedScreen() {
   const [tab, setTab] = useState<Tab>('saved');
@@ -19,35 +25,28 @@ export function SavedScreen() {
   const read = useReadPosts();
 
   return (
-    <div>
-      <header className="px-4 pb-2 pt-3">
-        <h1 className="text-2xl font-bold tracking-tight">Сохранёнки</h1>
-        <div className="mt-2 flex gap-1 rounded-full bg-secondary p-1">
-          <TabButton active={tab === 'saved'} onClick={() => setTab('saved')}>
-            Сохранённые
-          </TabButton>
-          <TabButton active={tab === 'hidden'} onClick={() => setTab('hidden')}>
-            Скрытые
-          </TabButton>
-          <TabButton active={tab === 'read'} onClick={() => setTab('read')}>
-            Просмотренные
-          </TabButton>
-        </div>
+    <>
+      <header
+        className="tf-pageheader"
+        style={{ flexDirection: 'column', alignItems: 'stretch', gap: 14, paddingBottom: 14 }}
+      >
+        <h1>Сохранёнки</h1>
+        <PillTabs tabs={TABS} active={tab} onChange={(id) => setTab(id as Tab)} />
       </header>
 
       {tab === 'saved' ? (
         <PostList
           query={saved}
           actions="saved"
-          emptyIcon={<BookmarkIcon />}
+          emptyIcon={<BookmarkIcon size={22} />}
           emptyTitle="Здесь будут сохранённые посты"
-          emptyBody="Нажмите 🔖 в карточке поста, чтобы вернуться к нему позже."
+          emptyBody="Нажмите «Сохранить» в карточке поста, чтобы вернуться к нему позже."
         />
       ) : tab === 'hidden' ? (
         <PostList
           query={hidden}
           actions="hidden"
-          emptyIcon={<EyeOffIcon />}
+          emptyIcon={<EyeOffIcon size={22} />}
           emptyTitle="Скрытых постов нет"
           emptyBody="Когда вы скроете пост из ленты, он появится здесь — отсюда же можно его вернуть."
         />
@@ -55,35 +54,12 @@ export function SavedScreen() {
         <PostList
           query={read}
           actions="feed"
-          emptyIcon={<EyeIcon />}
+          emptyIcon={<EyeIcon size={22} />}
           emptyTitle="Просмотренных постов пока нет"
           emptyBody="Посты, которые вы пролистали в ленте, собираются здесь — лента их больше не показывает."
         />
       )}
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`flex-1 rounded-full px-3 py-1.5 text-sm font-medium transition ${
-        active ? 'bg-button text-button-text shadow-sm' : 'text-hint'
-      }`}
-    >
-      {children}
-    </button>
+    </>
   );
 }
 
@@ -92,7 +68,7 @@ type PostListQuery = UseInfiniteQueryResult<InfiniteData<FeedPage, unknown>, Err
 interface PostListProps {
   query: PostListQuery;
   actions: PostCardActions;
-  emptyIcon: React.ReactNode;
+  emptyIcon: ReactNode;
   emptyTitle: string;
   emptyBody: string;
 }
@@ -116,17 +92,20 @@ function PostList({ query, actions, emptyIcon, emptyTitle, emptyBody }: PostList
 
   if (status === 'pending') {
     return (
-      <div className="flex h-40 items-center justify-center">
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
         <Spinner />
       </div>
     );
   }
   if (status === 'error') {
     return (
-      <div className="flex h-40 flex-col items-center justify-center gap-3 p-6">
-        <p className="text-hint">{(error as Error).message}</p>
-        <Button onClick={() => refetch()}>Retry</Button>
-      </div>
+      <EmptyState
+        icon={<AlertCircleIcon size={24} />}
+        title="Не удалось загрузить"
+        body={(error as Error).message}
+        actionLabel="Повторить"
+        onAction={() => refetch()}
+      />
     );
   }
 
@@ -140,12 +119,11 @@ function PostList({ query, actions, emptyIcon, emptyTitle, emptyBody }: PostList
       {posts.map((p) => (
         <PostCard key={p.id} post={p} actions={actions} />
       ))}
-      <div ref={sentinelRef} className="flex h-12 items-center justify-center">
-        {isFetchingNextPage ? (
-          <Spinner />
-        ) : hasNextPage ? (
-          <span className="text-xs text-hint">Загружаем ещё…</span>
-        ) : null}
+      <div
+        ref={sentinelRef}
+        style={{ display: 'flex', minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
+      >
+        {isFetchingNextPage ? <Spinner /> : null}
       </div>
     </>
   );

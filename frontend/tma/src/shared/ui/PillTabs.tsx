@@ -18,6 +18,7 @@ export function PillTabs({ tabs, active, onChange }: Props) {
           type="button"
           className="tf-pill"
           data-active={t.id === active}
+          aria-pressed={t.id === active}
           onClick={() => onChange(t.id)}
         >
           {t.label}
