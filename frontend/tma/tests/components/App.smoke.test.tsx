@@ -57,6 +57,6 @@ describe('App smoke', () => {
     expect(await screen.findByText('Smoke post body')).toBeInTheDocument();
     expect(screen.getByText('Smoke')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: /лента/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /refresh feed/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /обновить/i })).toBeInTheDocument();
   });
 });

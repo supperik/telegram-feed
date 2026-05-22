@@ -88,12 +88,12 @@ describe('PostText', () => {
     expect(spoiler?.classList.contains('is-revealed')).toBe(true);
   });
 
-  it('preserves line breaks via whitespace-pre-wrap', () => {
+  it('preserves line breaks', () => {
     const { container } = render(
       <PostText text={'line 1\nline 2'} textHtml={null} />,
     );
     const div = container.querySelector('div');
-    expect(div?.className).toContain('whitespace-pre-wrap');
+    expect(div?.className).toContain('tf-cardtext');
     expect(div?.textContent).toBe('line 1\nline 2');
   });
 });

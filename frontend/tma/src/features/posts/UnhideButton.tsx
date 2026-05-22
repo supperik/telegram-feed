@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useHidePost, useUnhidePost } from '@/features/posts/usePostActions';
+import { ActionButton } from '@/features/posts/ActionButton';
 import { EyeIcon, EyeOffIcon } from '@/shared/ui/icons';
 
 interface Props {
@@ -22,17 +23,13 @@ export function UnhideButton({ postId }: Props) {
     }
   };
   return (
-    <button
-      type="button"
+    <ActionButton
+      icon={hidden ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+      label={hidden ? 'Скрыт' : 'В ленте'}
+      on={!hidden}
       aria-label={hidden ? 'Unhide post' : 'Hide post'}
       aria-pressed={!hidden}
       onClick={onClick}
-      className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 py-2 text-[13px] transition active:bg-black/5 ${
-        hidden ? 'text-hint' : 'text-link'
-      }`}
-    >
-      {hidden ? <EyeOffIcon size={17} /> : <EyeIcon size={17} />}
-      <span>{hidden ? 'Скрыт' : 'В ленте'}</span>
-    </button>
+    />
   );
 }
