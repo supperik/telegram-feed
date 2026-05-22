@@ -1,7 +1,7 @@
 import { SDKProvider, useThemeParams } from '@tma.js/sdk-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Outlet, createRootRoute } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { useAuth } from '@/features/auth/useAuth';
 import { BottomNav } from '@/shared/ui/BottomNav';
@@ -32,11 +32,27 @@ const themeToCssVars: Record<string, string> = {
   secondaryBgColor: '--tg-secondary-bg',
 };
 
-function ThemeSync() {
-  // Initial-only sync: writes theme params to CSS vars once the SDK has them.
-  // Telegram theme can change at runtime (light↔dark toggle); reacting to that
-  // would require subscribing to the `theme` signal, which is out of MVP scope.
+// Perceived lightness of a #rrggbb string (Rec. 601 luma). Telegram theme
+// params arrive as hex; the design's token set has a dark and a light
+// variant — we pick which by the background colour. Defaults to dark.
+function isHexDark(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  const group = m?.[1];
+  if (!group) return true;
+  const n = parseInt(group, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+}
+
+// Initial-only sync: writes theme params to CSS vars once the SDK has them
+// and reports light/dark. Telegram theme can change at runtime (light↔dark
+// toggle); reacting to that would require subscribing to the `theme` signal,
+// which is out of MVP scope — `useThemeParams()` returns a stable instance.
+function useTelegramTheme(): 'dark' | 'light' {
   const theme = useThemeParams();
+  const [mode, setMode] = useState<'dark' | 'light'>('dark');
   useEffect(() => {
     if (!theme) return;
     const state = theme.getState();
@@ -44,30 +60,33 @@ function ThemeSync() {
       const v = state[key];
       if (v) document.documentElement.style.setProperty(cssVar, v);
     }
+    if (state.bgColor) setMode(isHexDark(state.bgColor) ? 'dark' : 'light');
   }, [theme]);
-  return null;
+  return mode;
 }
 
 function Gate() {
   const { status, error, retry } = useAuth();
   if (status === 'bootstrapping') {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="tf-fullcenter">
         <Spinner />
       </div>
     );
   }
   if (status === 'failed') {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-        <div className="text-center text-hint">{error ?? 'Authentication failed'}</div>
-        <Button onClick={retry}>Retry</Button>
+      <div className="tf-fullcenter" style={{ flexDirection: 'column', gap: 16 }}>
+        <div style={{ textAlign: 'center', color: 'var(--hint)' }}>
+          {error ?? 'Не удалось авторизоваться'}
+        </div>
+        <Button onClick={retry}>Повторить</Button>
       </div>
     );
   }
   return (
     <>
-      <div className="flex-1 overflow-y-auto pb-16">
+      <div className="tf-scroll">
         <Outlet />
       </div>
       <BottomNav />
@@ -75,14 +94,22 @@ function Gate() {
   );
 }
 
+function Shell() {
+  const mode = useTelegramTheme();
+  return (
+    <div className="tf-app" data-theme={mode}>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </div>
+  );
+}
+
 export const Route = createRootRoute({
   component: () => (
     <SDKProvider acceptCustomStyles>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <ThemeSync />
-          <Gate />
-        </AuthProvider>
+        <Shell />
       </QueryClientProvider>
     </SDKProvider>
   ),

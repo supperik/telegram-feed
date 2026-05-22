@@ -2,8 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ───────────────────────────────────────────────────────────────────
+   telegram-feed — design system (tf-*)
+
+   Layout, components, typography and motion are ported from the
+   supplied redesign. COLOR tokens, however, are derived from the
+   Telegram theme params (--tg-*) rather than the design's fixed
+   indigo palette — the `keep_tg` decision: the app keeps blending
+   into whatever theme the user's Telegram client uses.
+
+   The design's structural tokens (radii, easing, fonts) and its
+   theme-dependent constants that Telegram does not expose (shadows,
+   semantic danger/success/warn, photo placeholder) keep the
+   design's own values, split by [data-theme].
+   ─────────────────────────────────────────────────────────────────── */
+
 :root {
-  /* Light fallback (overridden by Telegram theme params at runtime). */
+  /* Telegram theme params — light fallback. ThemeSync (see __root.tsx)
+     overwrites these on documentElement once the SDK reports them. */
   --tg-bg: #f3f5f7;
   --tg-text: #0a0a0a;
   --tg-hint: #8e96a1;
@@ -11,14 +27,20 @@
   --tg-button: #2778d6;
   --tg-button-text: #ffffff;
   --tg-secondary-bg: #ffffff;
-  --app-danger: #d92d20;
-  --app-shadow-card: 0 1px 3px rgba(0, 0, 0, .06);
 
-  /* Soft-tint variants — Tailwind v3 opacity modifiers don't apply to CSS-var colors,
-     so we pre-mix the alpha here as their own tokens. */
-  --app-link-soft: rgba(39, 120, 214, .1);
-  --app-danger-soft: rgba(217, 45, 32, .1);
-  --app-danger-soft-pressed: rgba(217, 45, 32, .2);
+  /* Structural tokens — theme-independent */
+  --font-ui: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-full: 999px;
+
+  --ease-out: cubic-bezier(0.22, 0.95, 0.32, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,77 +50,1041 @@
     --tg-hint: #8e96a1;
     --tg-link: #5fa8ff;
     --tg-button: #5fa8ff;
+    --tg-button-text: #ffffff;
     --tg-secondary-bg: #232e3c;
-    --app-danger: #ff5a4d;
-    --app-shadow-card: none;
-    --app-link-soft: rgba(95, 168, 255, .18);
-    --app-danger-soft: rgba(255, 90, 77, .18);
-    --app-danger-soft-pressed: rgba(255, 90, 77, .28);
   }
 }
 
-html, body, #root { height: 100%; margin: 0; }
-#root { display: flex; flex-direction: column; background: var(--tg-bg); color: var(--tg-text); }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+/* ── Derived color tokens (theme-agnostic formulas over --tg-*) ── */
+.tf-app {
+  --bg: var(--tg-bg);
+  --bg-elev: var(--tg-bg);
+  --surface: var(--tg-secondary-bg);
+  --surface-2: color-mix(in oklab, var(--tg-secondary-bg) 92%, var(--tg-text));
+  --surface-hi: color-mix(in oklab, var(--tg-secondary-bg) 83%, var(--tg-text));
 
-/* Inline rendering of Telegram message entities (see PostText). */
-.post-text a {
-  color: var(--tg-link);
+  --border: color-mix(in oklab, var(--tg-hint) 48%, transparent);
+  --border-soft: color-mix(in oklab, var(--tg-hint) 24%, transparent);
+
+  --text: var(--tg-text);
+  --text-mid: color-mix(in oklab, var(--tg-text) 68%, var(--tg-hint));
+  --hint: var(--tg-hint);
+  --muted: color-mix(in oklab, var(--tg-hint) 62%, var(--tg-bg));
+
+  --accent: var(--tg-button);
+  --accent-soft: color-mix(in oklab, var(--tg-button) 16%, transparent);
+  --accent-glow: color-mix(in oklab, var(--tg-button) 34%, transparent);
+  --accent-text: var(--tg-link);
+  --accent-on: var(--tg-button-text);
+
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+  background: var(--bg);
+  color: var(--text);
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  letter-spacing: -0.005em;
+  position: relative;
+}
+
+/* ── Theme-dependent constants Telegram does not expose ── */
+.tf-app,
+.tf-app[data-theme="dark"] {
+  --danger: oklch(0.68 0.18 24);
+  --danger-soft: oklch(0.68 0.18 24 / 0.15);
+  --success: oklch(0.72 0.15 158);
+  --warn: oklch(0.80 0.14 80);
+  --warn-soft: oklch(0.80 0.14 80 / 0.18);
+  --shadow-card: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.55), 0 2px 4px -1px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 18px 48px -16px rgba(0, 0, 0, 0.6);
+  --shadow-nav: 0 -8px 24px -12px rgba(0, 0, 0, 0.5);
+  --photo-fallback: linear-gradient(135deg, oklch(0.32 0.04 268), oklch(0.22 0.02 268));
+  color-scheme: dark;
+}
+
+.tf-app[data-theme="light"] {
+  --danger: oklch(0.55 0.20 24);
+  --danger-soft: oklch(0.55 0.20 24 / 0.12);
+  --success: oklch(0.55 0.16 158);
+  --warn: oklch(0.65 0.16 80);
+  --warn-soft: oklch(0.65 0.16 80 / 0.15);
+  --shadow-card: 0 1px 0 oklch(1 0 0 / 0.5) inset, 0 6px 18px -10px rgba(20, 18, 40, 0.18), 0 1px 2px rgba(20, 18, 40, 0.06);
+  --shadow-pop: 0 16px 40px -16px rgba(20, 18, 40, 0.2);
+  --shadow-nav: 0 -8px 24px -16px rgba(20, 18, 40, 0.12);
+  --photo-fallback: linear-gradient(135deg, oklch(0.92 0.02 268), oklch(0.86 0.025 268));
+  color-scheme: light;
+}
+
+/* ── Reset within app ── */
+.tf-app,
+.tf-app * {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── App-level helper (auth gate states — not part of the design) ── */
+.tf-fullcenter {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* ── Scrollable area ── */
+.tf-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  scroll-behavior: smooth;
+}
+.tf-scroll::-webkit-scrollbar { display: none; }
+.tf-scroll { scrollbar-width: none; }
+
+/* ── Top app header (large title) ── */
+.tf-pageheader {
+  padding: 14px 18px 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tf-pageheader h1 {
+  font: 700 28px/1.05 var(--font-ui);
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.tf-pageheader .subtitle {
+  font: 500 12px/1.2 var(--font-ui);
+  color: var(--hint);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tf-iconbtn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  color: var(--text-mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-spring), background 0.15s, color 0.15s;
+}
+.tf-iconbtn:active { transform: scale(0.92); }
+.tf-iconbtn:hover { color: var(--text); background: var(--surface-2); }
+.tf-iconbtn:disabled { opacity: 0.45; cursor: default; }
+
+/* ── Tab bar (bottom nav) ── */
+.tf-tabbar {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border-soft);
+  z-index: 5;
+}
+/* Soft gradient fade above the tabbar so scrolling content tucks under */
+.tf-tabbar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 28px;
+  background: linear-gradient(to top, var(--bg-elev), transparent);
+  pointer-events: none;
+}
+
+/* Sliding active-pill indicator (animates between tab slots) */
+.tf-tab-pill {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  height: calc(100% - 20px - env(safe-area-inset-bottom, 0px));
+  width: calc((100% - 28px - (var(--count) - 1) * 4px) / var(--count));
+  transform: translateX(calc(var(--idx) * (100% + 4px)));
+  background: var(--accent-soft);
+  border-radius: var(--r-md);
+  pointer-events: none;
+  z-index: 0;
+  transition: transform 0.42s var(--ease-spring), background 0.2s;
+}
+
+.tf-tab {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px 6px;
+  color: var(--muted);
+  font: 600 10.5px/1 var(--font-ui);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  border-radius: var(--r-md);
+  background: transparent;
+  border: none;
   text-decoration: none;
+  transition: color 0.2s;
 }
-.post-text a:active {
-  opacity: 0.7;
+.tf-tab svg {
+  transition: transform 0.3s var(--ease-spring);
 }
-.post-text a.tg-mention {
-  color: var(--tg-link);
-  font-weight: 500;
+.tf-tab:hover { color: var(--text-mid); }
+.tf-tab[data-active="true"] {
+  color: var(--accent-text);
 }
-.post-text .tg-hashtag {
-  color: var(--tg-link);
+.tf-tab[data-active="true"] svg {
+  transform: translateY(-1px) scale(1.05);
 }
-.post-text strong { font-weight: 600; }
-.post-text em { font-style: italic; }
-.post-text u { text-decoration: underline; }
-.post-text s { text-decoration: line-through; opacity: 0.75; }
-.post-text code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.92em;
-  background: var(--app-link-soft);
-  padding: 0.05em 0.35em;
-  border-radius: 4px;
+/* Tiny accent dot below active tab label for extra affordance */
+.tf-tab[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
-.post-text pre {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.92em;
-  background: var(--app-link-soft);
+
+/* ── Pill tab group (Saved screen) ── */
+.tf-pillgroup {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-full);
+}
+.tf-pill {
+  flex: 1;
   padding: 8px 10px;
-  margin: 6px 0;
-  border-radius: 8px;
-  overflow-x: auto;
-  white-space: pre;
+  border-radius: var(--r-full);
+  font: 600 12.5px/1 var(--font-ui);
+  color: var(--hint);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s var(--ease-out);
+  border: none;
+  background: transparent;
 }
-.post-text pre code {
+.tf-pill[data-active="true"] {
+  background: var(--accent);
+  color: var(--accent-on);
+  box-shadow: 0 4px 14px -4px var(--accent-glow);
+}
+
+/* ── Card (post) ── */
+.tf-card {
+  margin: 0 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  transition: transform 0.18s var(--ease-out);
+}
+.tf-card.is-unread::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* ── Channel header inside card ── */
+.tf-cardhead {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 16px 8px;
+}
+.tf-cardhead .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-full);
+  background: var(--photo-fallback);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 14px/1 var(--font-ui);
+  color: var(--text);
+  overflow: hidden;
+  position: relative;
+}
+.tf-cardhead .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tf-cardhead .meta { min-width: 0; flex: 1; line-height: 1.2; }
+.tf-cardhead .title {
+  font: 700 14.5px/1.2 var(--font-ui);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tf-cardhead .title .lock {
+  display: inline-flex;
+  color: var(--hint);
+}
+.tf-cardhead .sub {
+  margin-top: 2px;
+  font: 500 11.5px/1.2 var(--font-ui);
+  color: var(--hint);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tf-cardhead .sub .dot {
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: var(--r-full);
+  background: currentColor;
+  opacity: 0.55;
+}
+
+/* ── Post text ── */
+.tf-cardtext {
+  padding: 4px 16px 4px;
+  font: 400 14.5px/1.5 var(--font-ui);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  letter-spacing: -0.003em;
+}
+.tf-cardtext.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+}
+.tf-cardtext.is-tappable {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.tf-cardtext.is-tappable:active { opacity: 0.7; }
+.tf-readmore {
+  margin: 4px 16px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 12.5px/1 var(--font-ui);
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.tf-readmore svg { transition: transform 0.2s var(--ease-out); }
+
+/* MD-style formatting (matches backend text_html: b/i/s/u/code/pre/a/blockquote/tg-spoiler) */
+.tf-cardtext b, .tf-cardtext strong { font-weight: 700; }
+.tf-cardtext i, .tf-cardtext em { font-style: italic; }
+.tf-cardtext s, .tf-cardtext del { text-decoration: line-through; color: var(--hint); }
+.tf-cardtext u { text-decoration: underline; text-underline-offset: 2px; }
+.tf-cardtext a {
+  color: var(--accent-text);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--accent-text) 35%, transparent);
+}
+.tf-cardtext code {
+  font: 500 0.88em/1 var(--font-mono);
+  background: var(--surface-2);
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border-soft);
+}
+.tf-cardtext pre {
+  font: 500 12.5px/1.45 var(--font-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+}
+.tf-cardtext pre code {
   background: transparent;
   padding: 0;
-  border-radius: 0;
+  border: none;
 }
-.post-text blockquote {
-  margin: 4px 0;
-  padding: 2px 10px;
-  border-left: 3px solid var(--tg-link);
-  color: var(--tg-text);
-  opacity: 0.85;
+.tf-cardtext blockquote {
+  margin: 6px 0;
+  padding: 4px 0 4px 12px;
+  border-left: 2.5px solid var(--accent);
+  color: var(--text-mid);
+  font-style: italic;
 }
-.post-text .tg-spoiler {
-  background: currentColor;
+.tf-cardtext .tg-spoiler {
+  background: var(--surface-hi);
   color: transparent;
-  border-radius: 3px;
+  border-radius: 4px;
+  padding: 0 3px;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color 0.3s, background 0.3s;
 }
-.post-text .tg-spoiler:hover,
-.post-text .tg-spoiler:focus,
-.post-text .tg-spoiler.is-revealed {
+.tf-cardtext .tg-spoiler.is-revealed {
+  background: transparent;
   color: inherit;
-  background: var(--app-link-soft);
 }
+.tf-cardtext h3 {
+  font: 700 16px/1.3 var(--font-ui);
+  margin: 8px 0 4px;
+}
+
+/* ── Media gallery (carousel) ── */
+.tf-media {
+  margin-top: 8px;
+  position: relative;
+  background: black;
+}
+.tf-media .reel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+.tf-media .reel::-webkit-scrollbar { display: none; }
+.tf-media .slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  aspect-ratio: 4 / 3;
+  position: relative;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.tf-media .slide.video::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, oklch(0 0 0 / 0.4), transparent 60%);
+}
+.tf-media .slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tf-media .dots {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: var(--r-full);
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.tf-media .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.4);
+  transition: width 0.2s var(--ease-out), background 0.2s;
+}
+.tf-media .dot.active {
+  width: 16px;
+  background: white;
+}
+.tf-media .count {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font: 600 11px/1 var(--font-ui);
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: white;
+  border-radius: var(--r-full);
+}
+.tf-media .play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.tf-media .play .btn {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-full);
+  background: oklch(1 0 0 / 0.92);
+  color: black;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.tf-media .video-meta {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  font: 600 11px/1 var(--font-ui);
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: white;
+  border-radius: var(--r-xs);
+}
+
+/* Carousel arrow buttons (overlaid on left/right edge) */
+.tf-media .nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-full);
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.15s, transform 0.18s var(--ease-spring);
+}
+.tf-media .nav-arrow:hover { background: rgba(0, 0, 0, 0.7); }
+.tf-media .nav-arrow:active { transform: translateY(-50%) scale(0.92); }
+.tf-media .nav-arrow.prev { left: 10px; }
+.tf-media .nav-arrow.next { right: 10px; }
+
+/* Single document/file row (no preview) */
+.tf-doc {
+  margin: 8px 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  color: var(--accent-text);
+  font: 600 13px/1.2 var(--font-ui);
+  cursor: pointer;
+  text-decoration: none;
+}
+.tf-doc .ic {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tf-doc .sub { font-weight: 500; color: var(--hint); font-size: 11.5px; margin-top: 1px; }
+
+/* ── Card footer (actions) ── */
+.tf-cardfoot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px 10px;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 6px;
+}
+.tf-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-mid);
+  font: 600 12px/1 var(--font-ui);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.15s var(--ease-spring);
+  position: relative;
+  text-decoration: none;
+}
+.tf-action svg { transition: transform 0.3s var(--ease-spring); }
+.tf-action:hover { color: var(--text); }
+.tf-action:active { transform: scale(0.9); }
+.tf-action:disabled { opacity: 0.5; cursor: default; }
+.tf-action[data-on="true"] { color: var(--accent-text); }
+.tf-action[data-on="true"] svg { transform: scale(1.08); }
+.tf-action[data-variant="open"] {
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  justify-content: center;
+}
+.tf-action[data-variant="open"]:hover {
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+
+.tf-action[data-variant="split-primary"] {
+  flex: 1;
+  justify-content: center;
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+}
+.tf-action[data-variant="split-primary"]:hover {
+  background: var(--surface-hi);
+  color: var(--text);
+}
+.tf-action[data-variant="split-primary"][data-on="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.tf-action[data-variant="split-secondary"] {
+  background: var(--surface-2);
+  padding: 10px;
+  border-radius: var(--r-md);
+  color: var(--hint);
+}
+.tf-action[data-variant="split-secondary"]:hover {
+  background: var(--surface-hi);
+  color: var(--text);
+}
+.tf-action[data-variant="split-secondary"][data-on="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* Icon bounce — restarts when React re-keys the wrapper on each tap */
+.tf-action-burst {
+  display: inline-flex;
+  animation: tf-burst 0.42s var(--ease-spring);
+  will-change: transform;
+}
+@keyframes tf-burst {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.28); }
+  60%  { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+/* Background flash — appears briefly on tap, then fades */
+.tf-action-flash {
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  background: var(--accent-soft);
+  pointer-events: none;
+  animation: tf-flash 0.42s var(--ease-out);
+}
+@keyframes tf-flash {
+  0%   { opacity: 0; transform: scale(0.6); }
+  30%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+
+/* ── Source list (rows) ── */
+.tf-list {
+  margin: 0 12px;
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.tf-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  position: relative;
+}
+.tf-row:last-child { border-bottom: none; }
+.tf-row .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-full);
+  background: var(--photo-fallback);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 13.5px/1 var(--font-ui);
+  overflow: hidden;
+}
+.tf-row .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tf-row .meta {
+  min-width: 0;
+  flex: 1;
+  line-height: 1.2;
+}
+.tf-row .meta .title {
+  font: 700 14px/1.2 var(--font-ui);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tf-row .meta .sub {
+  margin-top: 3px;
+  font: 500 11.5px/1.2 var(--font-ui);
+  color: var(--hint);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tf-row .meta .sub.is-warn { color: var(--warn); }
+.tf-row .controls {
+  display: flex;
+  gap: 4px;
+}
+.tf-row .iconbtn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: transparent;
+  border: none;
+  color: var(--hint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.18s var(--ease-spring);
+}
+.tf-row .iconbtn:hover { background: var(--surface-2); color: var(--text); }
+.tf-row .iconbtn:active { transform: scale(0.88); }
+.tf-row .iconbtn:disabled { opacity: 0.45; cursor: default; }
+.tf-row .iconbtn[data-variant="danger"]:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ── Add source card ── */
+.tf-addcard {
+  margin: 6px 12px 16px;
+  padding: 4px 5px 4px 14px;
+  background: var(--surface);
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.tf-addcard:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.tf-addcard input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font: 500 14px/1 var(--font-ui);
+  color: var(--text);
+  padding: 12px 0;
+}
+.tf-addcard input::placeholder { color: var(--hint); }
+.tf-addcard button {
+  border: none;
+  cursor: pointer;
+  font: 700 12.5px/1 var(--font-ui);
+  padding: 11px 18px;
+  background: var(--accent);
+  color: var(--accent-on);
+  border-radius: var(--r-full);
+  box-shadow: 0 4px 14px -4px var(--accent-glow);
+  transition: transform 0.18s var(--ease-spring), background 0.15s;
+}
+.tf-addcard button:active { transform: scale(0.94); }
+.tf-addcard button:disabled { opacity: 0.55; cursor: default; }
+.tf-addhint {
+  margin: -10px 22px 14px;
+  font: 500 11.5px/1.3 var(--font-ui);
+  color: var(--hint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tf-addhint.is-success { color: var(--success); }
+.tf-addhint.is-warn { color: var(--warn); }
+.tf-addhint.is-danger { color: var(--danger); }
+
+/* ── Section header ── */
+.tf-sectionhead {
+  margin: 18px 18px 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tf-sectionhead h2 {
+  margin: 0;
+  font: 700 16px/1.2 var(--font-ui);
+  letter-spacing: -0.015em;
+}
+.tf-sectionhead h2 .count {
+  margin-left: 6px;
+  font: 600 12px/1 var(--font-ui);
+  color: var(--hint);
+}
+.tf-sectionhead .link {
+  font: 600 12px/1 var(--font-ui);
+  color: var(--hint);
+  padding: 7px 11px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+/* ── Catalog grid (channel tiles) ── */
+.tf-catgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 12px;
+}
+.tf-cattile {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.tf-cattile .banner {
+  height: 64px;
+  background: var(--photo-fallback);
+  position: relative;
+}
+.tf-cattile .av-frame {
+  position: absolute;
+  left: 12px;
+  bottom: -18px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 3px solid var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.tf-cattile .av-frame > .avatar {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: var(--r-full);
+}
+.tf-cattile .av-frame img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-full); }
+.tf-cattile .body {
+  padding: 24px 12px 10px;
+  flex: 1;
+}
+.tf-cattile .name {
+  font: 700 13.5px/1.2 var(--font-ui);
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tf-cattile .handle {
+  margin-top: 3px;
+  font: 500 11px/1.2 var(--font-ui);
+  color: var(--hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tf-cattile .stats {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 11px/1 var(--font-ui);
+  color: var(--hint);
+}
+.tf-cattile .stats .pip {
+  width: 3px;
+  height: 3px;
+  border-radius: var(--r-full);
+  background: currentColor;
+  opacity: 0.5;
+}
+.tf-cattile .cta {
+  padding: 8px 10px 10px;
+  display: flex;
+  gap: 6px;
+}
+.tf-cattile .sub-btn {
+  flex: 1;
+  background: var(--accent);
+  color: var(--accent-on);
+  border: none;
+  font: 700 12px/1 var(--font-ui);
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-spring), background 0.15s;
+}
+.tf-cattile .sub-btn:active { transform: scale(0.95); }
+.tf-cattile .sub-btn:disabled { cursor: default; }
+.tf-cattile .sub-btn[data-state="subscribed"] {
+  background: var(--surface-2);
+  color: var(--text-mid);
+  border: 1px solid var(--border);
+}
+.tf-cattile .sub-btn[data-state="queued"],
+.tf-cattile .sub-btn[data-state="pending"] {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid color-mix(in oklab, var(--warn) 40%, transparent);
+}
+.tf-cattile .hide-btn {
+  width: 36px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--hint);
+  border-radius: var(--r-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tf-cattile .hide-btn:hover { background: var(--surface-2); color: var(--text); }
+
+/* ── Empty state ── */
+.tf-empty {
+  margin: 20px 18px;
+  padding: 36px 24px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-xl);
+  text-align: center;
+}
+.tf-empty .icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-full);
+  margin: 0 auto 14px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tf-empty h3 {
+  margin: 0 0 6px;
+  font: 700 16px/1.3 var(--font-ui);
+  letter-spacing: -0.01em;
+}
+.tf-empty p {
+  margin: 0 auto;
+  max-width: 240px;
+  font: 500 13px/1.45 var(--font-ui);
+  color: var(--hint);
+}
+.tf-empty .cta {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--accent-on);
+  border: none;
+  font: 700 13px/1 var(--font-ui);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  box-shadow: 0 4px 14px -4px var(--accent-glow);
+}
+
+/* ── Sub page header (back) ── */
+.tf-subhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 8px;
+}
+.tf-subhead .back {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-mid);
+  cursor: pointer;
+}
+.tf-subhead h2 {
+  margin: 0;
+  font: 700 18px/1.2 var(--font-ui);
+  letter-spacing: -0.015em;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+#root { height: 100%; }
+body {
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+img { color: transparent; }
