@@ -1,7 +1,7 @@
 import { SDKProvider, useThemeParams } from '@tma.js/sdk-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Outlet, createRootRoute } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { Outlet, createRootRoute, useRouterState } from '@tanstack/react-router';
+import { useEffect, useRef, useState } from 'react';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { useAuth } from '@/features/auth/useAuth';
 import { BottomNav } from '@/shared/ui/BottomNav';
@@ -67,6 +67,15 @@ function useTelegramTheme(): 'dark' | 'light' {
 
 function Gate() {
   const { status, error, retry } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Reset the shared scroll container on every route change — otherwise a
+  // hard fling keeps its momentum after the route swaps under it, and the
+  // next tab opens already mid-scroll.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [pathname]);
+
   if (status === 'bootstrapping') {
     return (
       <div className="tf-fullcenter">
@@ -86,7 +95,7 @@ function Gate() {
   }
   return (
     <>
-      <div className="tf-scroll">
+      <div ref={scrollRef} className="tf-scroll">
         <Outlet />
       </div>
       <BottomNav />
