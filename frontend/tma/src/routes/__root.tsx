@@ -1,7 +1,7 @@
 import { SDKProvider, useThemeParams } from '@tma.js/sdk-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Outlet, createRootRoute, useRouterState } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { useAuth } from '@/features/auth/useAuth';
 import { BottomNav } from '@/shared/ui/BottomNav';
@@ -69,12 +69,22 @@ function Gate() {
   const { status, error, retry } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Reset the shared scroll container on every route change — otherwise a
-  // hard fling keeps its momentum after the route swaps under it, and the
-  // next tab opens already mid-scroll.
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  // Per-route scroll memory. The scroll container is shared across tabs, so
+  // each route's last position is stashed by pathname and restored on return
+  // — switching tabs keeps your place instead of jumping to the top. The
+  // restore (a programmatic scrollTop write) also cancels any in-flight
+  // fling, so momentum never bleeds into the next tab.
+  const positions = useRef<Map<string, number>>(new Map());
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = positions.current.get(pathname) ?? 0;
   }, [pathname]);
+
+  const rememberScroll = () => {
+    const el = scrollRef.current;
+    if (el) positions.current.set(pathname, el.scrollTop);
+  };
 
   if (status === 'bootstrapping') {
     return (
@@ -95,7 +105,7 @@ function Gate() {
   }
   return (
     <>
-      <div ref={scrollRef} className="tf-scroll">
+      <div ref={scrollRef} className="tf-scroll" onScroll={rememberScroll}>
         <Outlet />
       </div>
       <BottomNav />
