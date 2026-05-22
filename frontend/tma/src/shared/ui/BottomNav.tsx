@@ -1,6 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import type { ComponentType } from 'react';
-import { BookmarkIcon, GridIcon, HomeIcon } from '@/shared/ui/icons';
+import type { ComponentType, CSSProperties } from 'react';
+import { BookmarkIcon, GridIcon, HomeIcon } from './icons';
 
 interface Tab {
   to: '/' | '/saved' | '/sources';
@@ -16,22 +16,30 @@ const tabs: Tab[] = [
 
 export function BottomNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeIdx = Math.max(
+    0,
+    tabs.findIndex((t) => (t.to === '/' ? pathname === '/' : pathname.startsWith(t.to))),
+  );
+  // CSS custom props drive the sliding pill — typed via an index signature.
+  const pillStyle: CSSProperties & Record<string, string | number> = {
+    '--idx': activeIdx,
+    '--count': tabs.length,
+  };
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-black/10 bg-bg">
-      {tabs.map(({ to, label, Icon }) => {
-        const active = to === '/' ? pathname === '/' : pathname.startsWith(to);
-        return (
-          <Link
-            key={to}
-            to={to}
-            aria-current={active ? 'page' : undefined}
-            className={`flex flex-col items-center gap-1 py-2 text-[11px] ${active ? 'text-link' : 'text-hint'}`}
-          >
-            <Icon size={22} />
-            {label}
-          </Link>
-        );
-      })}
+    <nav className="tf-tabbar">
+      <div className="tf-tab-pill" style={pillStyle} />
+      {tabs.map(({ to, label, Icon }, i) => (
+        <Link
+          key={to}
+          to={to}
+          className="tf-tab"
+          data-active={i === activeIdx}
+          aria-current={i === activeIdx ? 'page' : undefined}
+        >
+          <Icon size={22} />
+          <span>{label}</span>
+        </Link>
+      ))}
     </nav>
   );
 }

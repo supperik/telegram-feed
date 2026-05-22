@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { getTokens } from '@/features/auth/tokenStore';
 
 interface Props {
@@ -15,41 +16,42 @@ function authedImageUrl(url: string | null): string | null {
   return `${url}${sep}token=${encodeURIComponent(tokens.access_token)}`;
 }
 
-const GRADIENTS = [
-  'linear-gradient(135deg, #5fa8ff, #2778d6)',
-  'linear-gradient(135deg, #ff8a65, #e64a19)',
-  'linear-gradient(135deg, #81c784, #2e7d32)',
-  'linear-gradient(135deg, #ba68c8, #6a1b9a)',
-  'linear-gradient(135deg, #ffb74d, #ef6c00)',
-  'linear-gradient(135deg, #4dd0e1, #00838f)',
-];
-
-function gradientFor(title: string): string {
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) | 0;
-  return GRADIENTS[Math.abs(hash) % GRADIENTS.length]!;
-}
-
-export function Avatar({ photoUrl, title, size = 44 }: Props) {
-  const initial = title.trim()[0]?.toUpperCase() ?? '?';
-  const style = { width: `${size}px`, height: `${size}px` };
-  const resolvedUrl = authedImageUrl(photoUrl);
-  if (resolvedUrl) {
+export function Avatar({ photoUrl, title, size = 40 }: Props) {
+  const base: CSSProperties = {
+    width: size,
+    height: size,
+    fontSize: Math.round(size * 0.42),
+    borderRadius: '9999px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+    fontWeight: 700,
+    lineHeight: 1,
+    letterSpacing: '-0.01em',
+  };
+  const resolved = authedImageUrl(photoUrl);
+  if (resolved) {
     return (
-      <img
-        src={resolvedUrl}
-        alt=""
-        style={style}
-        className="shrink-0 rounded-full object-cover"
-      />
+      <div className="avatar" style={base}>
+        <img src={resolved} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      </div>
     );
   }
+  const initial = title.trim()[0]?.toUpperCase() ?? '?';
+  // Stable hue from the title's first code point — soft two-stop gradient.
+  const hue = ((title.charCodeAt(0) || 0) * 17) % 360;
   return (
     <div
-      style={{ ...style, background: gradientFor(title) }}
-      className="flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
+      className="avatar"
+      style={{
+        ...base,
+        background: `linear-gradient(135deg, oklch(0.55 0.12 ${hue}), oklch(0.35 0.1 ${hue + 40}))`,
+        color: '#fff',
+      }}
     >
-      <span style={{ fontSize: `${Math.round(size * 0.42)}px` }}>{initial}</span>
+      {initial}
     </div>
   );
 }

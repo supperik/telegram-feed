@@ -42,6 +42,6 @@ describe('IconButton', () => {
         <RefreshIcon />
       </IconButton>,
     );
-    expect(screen.getByRole('button', { name: 'del' })).toHaveClass('text-danger');
+    expect(screen.getByRole('button', { name: 'del' })).toHaveAttribute('data-variant', 'danger');
   });
 });
