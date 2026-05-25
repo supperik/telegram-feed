@@ -81,3 +81,14 @@ async def test_channel_backfill_state_table_exists(db_session) -> None:
             "FROM channel_backfill_state WHERE false"
         )
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_channel_categories_table_exists(db_session) -> None:
+    """0011 migration creates channel_categories with the expected columns."""
+    from sqlalchemy import text
+
+    await db_session.execute(
+        text("SELECT channel_id, category FROM channel_categories WHERE false")
+    )

@@ -85,3 +85,39 @@ async def test_user_read_post_insert_and_fk_cascade(db_session, seed_user) -> No
         .where(UserReadPost.post_id == post_id)
     )
     assert remaining == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_channel_category_link_insert_and_fk_cascade(db_session) -> None:
+    from sqlalchemy import func, select
+
+    from shared.models import Channel, ChannelCategoryLink
+
+    ch = Channel(tg_chat_id=900100, username="x_cat_link", title="XC")
+    db_session.add(ch)
+    await db_session.commit()
+    channel_id = ch.id
+
+    db_session.add_all([
+        ChannelCategoryLink(channel_id=channel_id, category="news"),
+        ChannelCategoryLink(channel_id=channel_id, category="tech"),
+    ])
+    await db_session.commit()
+
+    cats = await db_session.scalars(
+        select(ChannelCategoryLink.category)
+        .where(ChannelCategoryLink.channel_id == channel_id)
+        .order_by(ChannelCategoryLink.category)
+    )
+    assert list(cats) == ["news", "tech"]
+
+    # FK ON DELETE CASCADE: removing the channel removes its category links.
+    await db_session.delete(ch)
+    await db_session.commit()
+    remaining = await db_session.scalar(
+        select(func.count())
+        .select_from(ChannelCategoryLink)
+        .where(ChannelCategoryLink.channel_id == channel_id)
+    )
+    assert remaining == 0

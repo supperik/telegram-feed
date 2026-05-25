@@ -41,3 +41,12 @@ class ChannelBackfillState(Base):
     oldest_seen_msg_id: Mapped[int | None] = mapped_column(Integer)
     last_backfill_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ChannelCategoryLink(Base):
+    __tablename__ = "channel_categories"
+
+    channel_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("channels.id", ondelete="CASCADE"), primary_key=True
+    )
+    category: Mapped[str] = mapped_column(String(32), primary_key=True)
