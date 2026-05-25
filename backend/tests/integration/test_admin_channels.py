@@ -423,6 +423,142 @@ def test_list_channels_returns_hidden_flag(configured_env, admin_record, channel
 
 
 @pytest.mark.integration
+def test_set_channel_categories_replaces_set(configured_env, admin_record, channels):
+    from api.main import app
+
+    target = channels[1]
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        r1 = client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers=headers,
+            json={"categories": ["news", "tech"]},
+        )
+        assert r1.status_code == 200, r1.text
+        assert sorted(r1.json()["categories"]) == ["news", "tech"]
+
+        # PUT-replace: second call narrows the set down to {education}.
+        r2 = client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers=headers,
+            json={"categories": ["education"]},
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["categories"] == ["education"]
+
+
+@pytest.mark.integration
+def test_set_channel_categories_empty_clears(configured_env, admin_record, channels):
+    from api.main import app
+
+    target = channels[2]
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        headers = {"Authorization": f"Bearer {token}"}
+        client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers=headers,
+            json={"categories": ["sports"]},
+        )
+        r = client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers=headers,
+            json={"categories": []},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["categories"] == []
+
+
+@pytest.mark.integration
+def test_set_channel_categories_rejects_unknown(configured_env, admin_record, channels):
+    from api.main import app
+
+    target = channels[1]
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        r = client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"categories": ["news", "bogus"]},
+        )
+        assert r.status_code == 400
+        assert r.json()["detail"]["error"]["code"] == "invalid_category"
+
+
+@pytest.mark.integration
+def test_set_channel_categories_404_for_unknown_channel(configured_env, admin_record):
+    from api.main import app
+
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        r = client.put(
+            "/admin/channels/999999/categories",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"categories": ["news"]},
+        )
+        assert r.status_code == 404
+        assert r.json()["detail"]["error"]["code"] == "channel_not_found"
+
+
+@pytest.mark.integration
+def test_set_channel_categories_writes_audit(configured_env, admin_record, channels):
+    import asyncio
+
+    from sqlalchemy import select
+    from shared.config import get_settings
+    from shared.db import make_engine, make_session_factory
+    from shared.models import AdminAction
+    from api.main import app
+
+    target = channels[1]
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"categories": ["news", "business"]},
+        )
+
+    async def fetch():
+        get_settings.cache_clear()
+        engine = make_engine(get_settings().postgres_dsn)
+        sf = make_session_factory(engine)
+        async with sf() as session:
+            res = await session.execute(
+                select(AdminAction).where(AdminAction.action == "set_channel_categories")
+            )
+            rows = res.scalars().all()
+        await engine.dispose()
+        return rows
+
+    actions = asyncio.run(fetch())
+    relevant = [a for a in actions if (a.target or {}).get("channel_id") == target["id"]]
+    assert len(relevant) >= 1
+    assert sorted(relevant[-1].target["categories"]) == ["business", "news"]
+
+
+@pytest.mark.integration
+def test_list_channels_includes_categories(configured_env, admin_record, channels):
+    from api.main import app
+
+    target = channels[1]
+    with TestClient(app) as client:
+        token = _login(client, admin_record)
+        headers = {"Authorization": f"Bearer {token}"}
+        client.put(
+            f"/admin/channels/{target['id']}/categories",
+            headers=headers,
+            json={"categories": ["tech"]},
+        )
+        r = client.get("/admin/channels?limit=200", headers=headers)
+        assert r.status_code == 200, r.text
+        by_id = {c["id"]: c for c in r.json()["channels"]}
+        assert by_id[target["id"]]["categories"] == ["tech"]
+
+
+@pytest.mark.integration
 def test_user_token_rejected_on_admin_endpoint(configured_env, admin_record, channels):
     """Cross-issuer protection: a user-side access token must not work here."""
     from shared.auth.jwt import encode_access

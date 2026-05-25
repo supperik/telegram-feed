@@ -1,12 +1,12 @@
 import base64
 import json
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import Channel, ChannelSubscription, Post
+from shared.models import Channel, ChannelCategoryLink, ChannelSubscription, Post
 
 
 MAX_CHANNELS_LIMIT = 200
@@ -44,6 +44,12 @@ def _admin_channel_select():
     last_post_col = posts_agg.c.last_post_at
     posts_count_col = func.coalesce(posts_agg.c.posts_count, 0)
     ref_count_col = func.coalesce(ChannelSubscription.ref_count, 0)
+    categories_subq = (
+        select(func.array_agg(ChannelCategoryLink.category))
+        .where(ChannelCategoryLink.channel_id == Channel.id)
+        .scalar_subquery()
+        .correlate(Channel)
+    )
 
     stmt = (
         select(
@@ -60,6 +66,7 @@ def _admin_channel_select():
             last_post_col.label("last_post_at"),
             Channel.created_at,
             ref_count_col.label("ref_count"),
+            categories_subq.label("categories"),
         )
         .select_from(Channel)
         .outerjoin(posts_agg, posts_agg.c.channel_id == Channel.id)
@@ -285,3 +292,17 @@ async def unhide_channel(session: AsyncSession, channel_id: int) -> Channel | No
         .execution_options(populate_existing=True)
     )
     return res.scalar_one_or_none()
+
+
+async def set_channel_categories(
+    session: AsyncSession,
+    *,
+    channel_id: int,
+    categories: Iterable[str],
+) -> None:
+    await session.execute(
+        delete(ChannelCategoryLink).where(ChannelCategoryLink.channel_id == channel_id)
+    )
+    rows = [{"channel_id": channel_id, "category": cat} for cat in set(categories)]
+    if rows:
+        await session.execute(insert(ChannelCategoryLink), rows)

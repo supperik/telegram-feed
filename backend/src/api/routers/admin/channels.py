@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.channel_photo import channel_photo_url
 from api.deps import get_current_admin, get_db
+from shared.categories import CATEGORY_SLUGS
 from shared.models import Admin
 from shared.repositories.admins import (
     DEFAULT_ORDER,
@@ -16,6 +17,7 @@ from shared.repositories.admins import (
     get_channel_row_for_admin,
     hide_channel,
     list_channels_for_admin,
+    set_channel_categories,
     unban_channel,
     unhide_channel,
 )
@@ -39,6 +41,7 @@ class ChannelOut(BaseModel):
     hidden: bool
     last_post_at: datetime | None
     created_at: datetime
+    categories: list[str] = []
 
 
 class ChannelsListResponse(BaseModel):
@@ -52,6 +55,10 @@ class BanRequest(BaseModel):
 
 class UnbanRequest(BaseModel):
     pass
+
+
+class SetCategoriesRequest(BaseModel):
+    categories: list[str]
 
 
 def _not_found() -> HTTPException:
@@ -105,6 +112,7 @@ def _channel_out_from_row(r: dict) -> "ChannelOut":
         hidden=r["hidden"],
         last_post_at=r["last_post_at"],
         created_at=r["created_at"],
+        categories=sorted(r.get("categories") or []),
     )
 
 
@@ -198,6 +206,37 @@ async def unhide_channel_endpoint(
         db, admin_id=admin.id,
         action="unhide_channel",
         target={"channel_id": channel_id},
+    )
+    await db.commit()
+    row = await get_channel_row_for_admin(db, channel_id)
+    if row is None:
+        raise _not_found()
+    return _channel_out_from_row(row)
+
+
+@router.put("/{channel_id}/categories", response_model=ChannelOut)
+async def set_channel_categories_endpoint(
+    channel_id: int,
+    body: SetCategoriesRequest,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelOut:
+    unknown = [c for c in body.categories if c not in CATEGORY_SLUGS]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "invalid_category", "values": unknown}},
+        )
+    existing = await get_channel_or_none(db, channel_id)
+    if existing is None:
+        raise _not_found()
+
+    deduped = sorted(set(body.categories))
+    await set_channel_categories(db, channel_id=channel_id, categories=deduped)
+    await append_admin_action(
+        db, admin_id=admin.id,
+        action="set_channel_categories",
+        target={"channel_id": channel_id, "categories": deduped},
     )
     await db.commit()
     row = await get_channel_row_for_admin(db, channel_id)
