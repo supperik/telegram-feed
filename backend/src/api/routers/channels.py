@@ -18,9 +18,15 @@ from api.channel_photo import channel_photo_url
 from api.deps import get_current_user, get_db, get_settings
 from api.errors import APIError
 from api.pagination import CatalogCursor
-from api.schemas.channels import CatalogChannelItem, CatalogPage
+from api.schemas.channels import (
+    CatalogChannelItem,
+    CatalogPage,
+    ChannelCategoriesResponse,
+    ChannelCategory,
+)
 from api.schemas.sources import ChannelSummary
 from shared.auth.jwt import decode_access
+from shared.categories import CATEGORY_SLUGS, CHANNEL_CATEGORIES
 from shared.config import Settings
 from shared.models import Channel, User
 from shared.repositories.channel_catalog import (
@@ -57,15 +63,30 @@ async def _get_user_for_channel_photo(
     return user
 
 
+@router.get("/categories", response_model=ChannelCategoriesResponse)
+async def get_categories() -> ChannelCategoriesResponse:
+    return ChannelCategoriesResponse(
+        categories=[ChannelCategory(slug=slug, title=title) for slug, title in CHANNEL_CATEGORIES]
+    )
+
+
 @router.get("/catalog", response_model=CatalogPage)
 async def get_catalog(
     view: Literal["available", "hidden"] = Query(default="available"),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     q: str | None = Query(default=None, max_length=128),
+    category: str | None = Query(default=None, max_length=32),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> CatalogPage:
+    if category is not None and category not in CATEGORY_SLUGS:
+        raise APIError(
+            code="invalid_category",
+            message=f"Unknown category: {category}",
+            status_code=400,
+        )
+
     if cursor is None:
         cursor_obj = (
             CatalogCursor.initial_available()
@@ -83,11 +104,11 @@ async def get_catalog(
 
     if view == "available":
         rows = await list_catalog_available(
-            db, user_id=user.id, cursor=cursor_obj, limit=limit, q=q,
+            db, user_id=user.id, cursor=cursor_obj, limit=limit, q=q, category=category,
         )
     else:
         rows = await list_catalog_hidden(
-            db, user_id=user.id, cursor=cursor_obj, limit=limit, q=q,
+            db, user_id=user.id, cursor=cursor_obj, limit=limit, q=q, category=category,
         )
 
     items = [
@@ -102,6 +123,7 @@ async def get_catalog(
             last_post_at=r.last_post_at,
             is_subscribed=r.is_subscribed,
             is_hidden_from_catalog=r.is_hidden_from_catalog,
+            categories=r.categories,
         )
         for r in rows
     ]

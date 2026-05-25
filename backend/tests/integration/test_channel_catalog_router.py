@@ -3,6 +3,7 @@ import pytest
 from shared.auth.jwt import encode_access
 from shared.models import (
     Channel,
+    ChannelCategoryLink,
     ChannelSubscription,
     UserCatalogHiddenChannel,
     UserSource,
@@ -45,6 +46,7 @@ async def _reset_catalog_router_inputs(db_session):
     await db_session.execute(sql_delete(UserCatalogHiddenChannel))
     await db_session.execute(sql_delete(UserSource))
     await db_session.execute(sql_delete(ChannelSubscription))
+    await db_session.execute(sql_delete(ChannelCategoryLink))
     await db_session.commit()
     yield
 
@@ -208,6 +210,57 @@ async def test_hide_endpoint_404_for_missing_channel(async_client, seed_user):
     )
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "channel_not_found"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_categories_returns_full_constant_list(async_client, seed_user):
+    uid = await seed_user(tg_user_id=320)
+    r = await async_client.get("/channels/categories", headers=_auth(uid))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [c["slug"] for c in body["categories"]] == [
+        "news", "tech", "business", "entertainment", "sports", "education",
+    ]
+    titles = {c["slug"]: c["title"] for c in body["categories"]}
+    assert titles["news"] == "Новости"
+    assert titles["education"] == "Образование"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_catalog_filters_by_category(async_client, db_session, seed_user):
+    uid = await seed_user(tg_user_id=321)
+    news_ch = await _seed_active_channel(
+        db_session, tg_chat_id=220001, username="cat_news_r", title="N", posts_count=5,
+    )
+    tech_ch = await _seed_active_channel(
+        db_session, tg_chat_id=220002, username="cat_tech_r", title="T", posts_count=4,
+    )
+    db_session.add_all([
+        ChannelCategoryLink(channel_id=news_ch.id, category="news"),
+        ChannelCategoryLink(channel_id=tech_ch.id, category="tech"),
+    ])
+    await db_session.commit()
+
+    r = await async_client.get(
+        "/channels/catalog?category=news", headers=_auth(uid),
+    )
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert [i["channel"]["id"] for i in items] == [news_ch.id]
+    assert items[0]["categories"] == ["news"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_get_catalog_rejects_unknown_category(async_client, seed_user):
+    uid = await seed_user(tg_user_id=322)
+    r = await async_client.get(
+        "/channels/catalog?category=bogus", headers=_auth(uid),
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "invalid_category"
 
 
 @pytest.mark.integration

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import and_, delete, exists, func, or_, select, tuple_
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.pagination import CatalogCursor
 from shared.models import (
     Channel,
+    ChannelCategoryLink,
     ChannelSubscription,
     UserCatalogHiddenChannel,
     UserSource,
@@ -28,6 +29,7 @@ class CatalogRow:
     is_subscribed: bool
     is_hidden_from_catalog: bool
     hidden_at: datetime | None = None  # populated only by list_catalog_hidden
+    categories: list[str] = field(default_factory=list)
 
 
 def _q_filter(q: str | None):
@@ -41,6 +43,27 @@ def _q_filter(q: str | None):
     )
 
 
+def _categories_subquery():
+    # array_agg of an empty match returns NULL — callers normalize it to [].
+    return (
+        select(func.array_agg(ChannelCategoryLink.category))
+        .where(ChannelCategoryLink.channel_id == Channel.id)
+        .scalar_subquery()
+        .correlate(Channel)
+    )
+
+
+def _category_filter(category: str | None):
+    if category is None:
+        return None
+    return exists().where(
+        and_(
+            ChannelCategoryLink.channel_id == Channel.id,
+            ChannelCategoryLink.category == category,
+        )
+    )
+
+
 async def list_catalog_available(
     session: AsyncSession,
     *,
@@ -48,6 +71,7 @@ async def list_catalog_available(
     cursor: CatalogCursor,
     limit: int,
     q: str | None = None,
+    category: str | None = None,
 ) -> list[CatalogRow]:
     assert cursor.view == "available"
     hidden_select = select(UserCatalogHiddenChannel.channel_id).where(
@@ -67,6 +91,7 @@ async def list_catalog_available(
             Channel.last_post_at,
             func.coalesce(ChannelSubscription.ref_count, 0).label("subscribers_count"),
             is_sub.label("is_subscribed"),
+            _categories_subquery().label("categories"),
         )
         # Outer join: catalog visibility does not depend on an active (or any)
         # subscription — a swept channel must stay listed so the last
@@ -93,6 +118,10 @@ async def list_catalog_available(
         # When the user is searching (q is set) hidden channels remain findable.
         stmt = stmt.where(Channel.hidden.is_(False))
 
+    cat_filter = _category_filter(category)
+    if cat_filter is not None:
+        stmt = stmt.where(cat_filter)
+
     res = await session.execute(stmt)
     return [
         CatalogRow(
@@ -106,6 +135,7 @@ async def list_catalog_available(
             is_subscribed=bool(r.is_subscribed),
             is_hidden_from_catalog=False,
             hidden_at=None,
+            categories=list(r.categories or []),
         )
         for r in res.all()
     ]
@@ -144,6 +174,7 @@ async def list_catalog_hidden(
     cursor: CatalogCursor,
     limit: int,
     q: str | None = None,
+    category: str | None = None,
 ) -> list[CatalogRow]:
     assert cursor.view == "hidden"
     is_sub = exists().where(
@@ -160,6 +191,7 @@ async def list_catalog_hidden(
             func.coalesce(ChannelSubscription.ref_count, 0).label("subscribers_count"),
             is_sub.label("is_subscribed"),
             UserCatalogHiddenChannel.hidden_at,
+            _categories_subquery().label("categories"),
         )
         .join(
             UserCatalogHiddenChannel,
@@ -183,6 +215,10 @@ async def list_catalog_hidden(
     if q_filter is not None:
         stmt = stmt.where(q_filter)
 
+    cat_filter = _category_filter(category)
+    if cat_filter is not None:
+        stmt = stmt.where(cat_filter)
+
     res = await session.execute(stmt)
     return [
         CatalogRow(
@@ -196,6 +232,7 @@ async def list_catalog_hidden(
             is_subscribed=bool(r.is_subscribed),
             is_hidden_from_catalog=True,
             hidden_at=r.hidden_at,
+            categories=list(r.categories or []),
         )
         for r in res.all()
     ]

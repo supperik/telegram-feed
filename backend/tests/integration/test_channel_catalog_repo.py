@@ -5,6 +5,7 @@ from sqlalchemy import delete
 from api.pagination import CatalogCursor
 from shared.models import (
     Channel,
+    ChannelCategoryLink,
     ChannelSubscription,
     UserCatalogHiddenChannel,
     UserSource,
@@ -29,6 +30,7 @@ async def _reset_catalog_dependent_rows(db_session):
     await db_session.execute(delete(UserCatalogHiddenChannel))
     await db_session.execute(delete(UserSource))
     await db_session.execute(delete(ChannelSubscription))
+    await db_session.execute(delete(ChannelCategoryLink))
     await db_session.commit()
     yield
 
@@ -377,6 +379,110 @@ async def test_hide_unhide_round_trip_idempotent(db_session, seed_user) -> None:
     assert (
         await db_session.get(UserCatalogHiddenChannel, (uid, ch.id))
     ) is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_filters_by_category(db_session, seed_user) -> None:
+    uid = await seed_user(tg_user_id=140)
+    c_news = Channel(tg_chat_id=15001, username="cat_news", title="N", posts_count=5)
+    c_tech = Channel(tg_chat_id=15002, username="cat_tech", title="T", posts_count=4)
+    c_none = Channel(tg_chat_id=15003, username="cat_none", title="X", posts_count=3)
+    db_session.add_all([c_news, c_tech, c_none])
+    await db_session.commit()
+    db_session.add_all([
+        ChannelSubscription(channel_id=c_news.id, status="active", ref_count=1),
+        ChannelSubscription(channel_id=c_tech.id, status="active", ref_count=1),
+        ChannelSubscription(channel_id=c_none.id, status="active", ref_count=1),
+        ChannelCategoryLink(channel_id=c_news.id, category="news"),
+        ChannelCategoryLink(channel_id=c_tech.id, category="tech"),
+    ])
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+        category="news",
+    )
+    assert [r.channel_id for r in rows] == [c_news.id]
+    assert rows[0].categories == ["news"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_returns_multi_category_channel_for_each_category(
+    db_session, seed_user,
+) -> None:
+    uid = await seed_user(tg_user_id=141)
+    ch = Channel(tg_chat_id=16001, username="cat_multi", title="M", posts_count=7)
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add_all([
+        ChannelSubscription(channel_id=ch.id, status="active", ref_count=1),
+        ChannelCategoryLink(channel_id=ch.id, category="news"),
+        ChannelCategoryLink(channel_id=ch.id, category="tech"),
+    ])
+    await db_session.commit()
+
+    for cat in ("news", "tech"):
+        rows = await list_catalog_available(
+            db_session,
+            user_id=uid,
+            cursor=CatalogCursor.initial_available(),
+            limit=50,
+            category=cat,
+        )
+        assert [r.channel_id for r in rows] == [ch.id]
+        assert sorted(rows[0].categories) == ["news", "tech"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_categories_populated_without_category_filter(
+    db_session, seed_user,
+) -> None:
+    uid = await seed_user(tg_user_id=142)
+    ch = Channel(tg_chat_id=17001, username="cat_x", title="X", posts_count=2)
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add_all([
+        ChannelSubscription(channel_id=ch.id, status="active", ref_count=1),
+        ChannelCategoryLink(channel_id=ch.id, category="business"),
+    ])
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+    )
+    assert [r.channel_id for r in rows] == [ch.id]
+    assert rows[0].categories == ["business"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_available_channel_without_category_links_returns_empty_list(
+    db_session, seed_user,
+) -> None:
+    uid = await seed_user(tg_user_id=143)
+    ch = Channel(tg_chat_id=17501, username="cat_nocat", title="NC", posts_count=2)
+    db_session.add(ch)
+    await db_session.commit()
+    db_session.add(ChannelSubscription(channel_id=ch.id, status="active", ref_count=1))
+    await db_session.commit()
+
+    rows = await list_catalog_available(
+        db_session,
+        user_id=uid,
+        cursor=CatalogCursor.initial_available(),
+        limit=50,
+    )
+    assert [r.channel_id for r in rows] == [ch.id]
+    assert rows[0].categories == []
 
 
 @pytest.mark.integration

@@ -11,8 +11,18 @@ class CatalogChannelItem(BaseModel):
     last_post_at: datetime | None
     is_subscribed: bool
     is_hidden_from_catalog: bool
+    categories: list[str] = []
 
 
 class CatalogPage(BaseModel):
     items: list[CatalogChannelItem]
     next_cursor: str | None = None
+
+
+class ChannelCategory(BaseModel):
+    slug: str
+    title: str
+
+
+class ChannelCategoriesResponse(BaseModel):
+    categories: list[ChannelCategory]
