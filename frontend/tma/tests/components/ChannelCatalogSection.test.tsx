@@ -205,4 +205,61 @@ describe('ChannelCatalogSection', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Ждёт одобрения')).toBeInTheDocument();
   });
+
+  it('forwards the search input as q after debouncing and shows a no-results state', async () => {
+    authenticate();
+    const matchChannel = {
+      id: 1001,
+      username: 'meduza',
+      title: 'Meduza',
+      photo_url: null,
+      is_private: false,
+    };
+    const otherChannel = {
+      id: 1002,
+      username: 'other',
+      title: 'Other',
+      photo_url: null,
+      is_private: false,
+    };
+    server.use(
+      http.get(`${API_BASE}/channels/catalog`, ({ request }) => {
+        const url = new URL(request.url);
+        const view = url.searchParams.get('view') ?? 'available';
+        if (view !== 'available') {
+          return HttpResponse.json({ items: [], next_cursor: null });
+        }
+        const q = (url.searchParams.get('q') ?? '').toLowerCase();
+        const all = [matchChannel, otherChannel].filter((c) =>
+          q ? c.title.toLowerCase().includes(q) || c.username.includes(q) : true,
+        );
+        return HttpResponse.json({
+          items: all.map((channel) => ({
+            channel,
+            subscribers_count: 1,
+            last_post_at: null,
+            is_subscribed: false,
+            is_hidden_from_catalog: false,
+          })),
+          next_cursor: null,
+        });
+      }),
+    );
+    renderWithRouter();
+    await screen.findByText('Meduza');
+    expect(screen.getByText('Other')).toBeInTheDocument();
+
+    const input = screen.getByPlaceholderText(/поиск/i);
+    await userEvent.type(input, 'medu');
+    expect(await screen.findByText('Meduza')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText('Other')).not.toBeInTheDocument(),
+    );
+
+    await userEvent.clear(input);
+    await userEvent.type(input, 'zzz-nothing');
+    expect(
+      await screen.findByText(/ничего не найдено/i),
+    ).toBeInTheDocument();
+  });
 });
