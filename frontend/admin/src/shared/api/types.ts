@@ -24,6 +24,16 @@ export type Channel = {
   hidden: boolean;
   last_post_at: string | null;
   created_at: string;
+  categories?: string[];
+};
+
+export type ChannelCategory = {
+  slug: string;
+  title: string;
+};
+
+export type ChannelCategoriesResponse = {
+  categories: ChannelCategory[];
 };
 
 export type ChannelsListResponse = {

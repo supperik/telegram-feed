@@ -10,6 +10,7 @@ vi.mock("../../shared/api/client", () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
   },
 }));
 
@@ -106,8 +107,7 @@ describe("ChannelsScreen", () => {
     });
 
     // First call uses the default sort (last_post_at desc).
-    expect(apiClient.get).toHaveBeenNthCalledWith(
-      1,
+    expect(apiClient.get).toHaveBeenCalledWith(
       "/admin/channels",
       expect.objectContaining({
         params: expect.objectContaining({ sort: "last_post_at", order: "desc" }),
@@ -117,8 +117,7 @@ describe("ChannelsScreen", () => {
     // Click "Posts" header → switches to posts_count desc.
     await user.click(screen.getByRole("button", { name: /^Posts/ }));
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenNthCalledWith(
-        2,
+      expect(apiClient.get).toHaveBeenCalledWith(
         "/admin/channels",
         expect.objectContaining({
           params: expect.objectContaining({ sort: "posts_count", order: "desc" }),
@@ -129,8 +128,7 @@ describe("ChannelsScreen", () => {
     // Second click on the same header toggles order to asc.
     await user.click(screen.getByRole("button", { name: /^Posts/ }));
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenNthCalledWith(
-        3,
+      expect(apiClient.get).toHaveBeenCalledWith(
         "/admin/channels",
         expect.objectContaining({
           params: expect.objectContaining({ sort: "posts_count", order: "asc" }),
@@ -173,6 +171,48 @@ describe("ChannelsScreen", () => {
         {},
       );
     });
+  });
+
+  it("renders category checkboxes and PUTs the new set when one is toggled", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === "/channels/categories") {
+        return {
+          data: {
+            categories: [
+              { slug: "news", title: "Новости" },
+              { slug: "tech", title: "Технологии" },
+            ],
+          },
+        };
+      }
+      return {
+        data: {
+          channels: [{ ...SAMPLE_CHANNELS[0], categories: ["news"] }],
+          next_cursor: null,
+        },
+      };
+    });
+    vi.mocked(apiClient.put).mockResolvedValueOnce({
+      data: { ...SAMPLE_CHANNELS[0], categories: ["news", "tech"] },
+    });
+
+    renderWithClient(<ChannelsScreen />);
+    await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+
+    const newsCheckbox = await screen.findByRole("checkbox", { name: /Новости/ });
+    expect(newsCheckbox).toBeChecked();
+    const techCheckbox = screen.getByRole("checkbox", { name: /Технологии/ });
+    expect(techCheckbox).not.toBeChecked();
+
+    await user.click(techCheckbox);
+
+    await waitFor(() =>
+      expect(apiClient.put).toHaveBeenCalledWith(
+        "/admin/channels/1/categories",
+        { categories: ["news", "tech"] },
+      ),
+    );
   });
 
   it("opens BanDialog when Ban is clicked and submits ban request", async () => {

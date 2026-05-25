@@ -1,7 +1,12 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiClient } from "../../shared/api/client";
-import type { Channel, ChannelsListResponse } from "../../shared/api/types";
+import type {
+  Channel,
+  ChannelCategoriesResponse,
+  ChannelCategory,
+  ChannelsListResponse,
+} from "../../shared/api/types";
 import { formatMskMinutes } from "../../shared/format/datetime";
 import { Button } from "../../shared/ui/Button";
 import { Input } from "../../shared/ui/Input";
@@ -127,6 +132,35 @@ export function ChannelsScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "channels"] }),
   });
 
+  const categoriesQuery = useQuery<ChannelCategory[]>({
+    queryKey: ["channel-categories"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ChannelCategoriesResponse>(
+        "/channels/categories",
+      );
+      return data.categories;
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const setCategoriesMut = useMutation({
+    mutationFn: async ({ id, categories }: { id: number; categories: string[] }) => {
+      const { data } = await apiClient.put<Channel>(
+        `/admin/channels/${id}/categories`,
+        { categories },
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "channels"] }),
+  });
+
+  const toggleCategory = (channel: Channel, slug: string, on: boolean) => {
+    const next = new Set(channel.categories ?? []);
+    if (on) next.add(slug);
+    else next.delete(slug);
+    setCategoriesMut.mutate({ id: channel.id, categories: [...next].sort() });
+  };
+
   const rows = query.data?.pages.flatMap((p) => p.channels) ?? [];
 
   const onSortChange = ({
@@ -178,6 +212,7 @@ export function ChannelsScreen() {
               <SortableTh field="hidden" currentSort={sort} currentOrder={order} onChange={onSortChange}>
                 Hidden
               </SortableTh>
+              <Th>Categories</Th>
               <Th>Actions</Th>
             </tr>
           </thead>
@@ -205,6 +240,27 @@ export function ChannelsScreen() {
                   )}
                 </Td>
                 <Td>{c.hidden ? "🙈 hidden" : "—"}</Td>
+                <Td>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {(categoriesQuery.data ?? []).map((cat) => {
+                      const checked = c.categories?.includes(cat.slug) ?? false;
+                      return (
+                        <label
+                          key={cat.slug}
+                          className="inline-flex items-center gap-1 text-xs cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={setCategoriesMut.isPending}
+                            onChange={(e) => toggleCategory(c, cat.slug, e.target.checked)}
+                          />
+                          <span>{cat.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Td>
                 <Td>
                   <div className="flex gap-2">
                     {c.hidden ? (
