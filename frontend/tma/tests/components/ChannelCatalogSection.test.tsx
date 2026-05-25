@@ -42,6 +42,17 @@ function catalogHandler(byView: Record<'available' | 'hidden', unknown[]>) {
   });
 }
 
+function categoriesHandler(
+  list: Array<{ slug: string; title: string }> = [
+    { slug: 'news', title: 'Новости' },
+    { slug: 'tech', title: 'Технологии' },
+  ],
+) {
+  return http.get(`${API_BASE}/channels/categories`, () =>
+    HttpResponse.json({ categories: list }),
+  );
+}
+
 const dormantChannel = {
   id: 7,
   username: 'dormant',
@@ -204,6 +215,68 @@ describe('ChannelCatalogSection', () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText('Ждёт одобрения')).toBeInTheDocument();
+  });
+
+  it('renders category tabs and forwards the active one as category', async () => {
+    authenticate();
+    const newsCh = {
+      id: 2001,
+      username: 'newsone',
+      title: 'NewsOne',
+      photo_url: null,
+      is_private: false,
+    };
+    const techCh = {
+      id: 2002,
+      username: 'techone',
+      title: 'TechOne',
+      photo_url: null,
+      is_private: false,
+    };
+    server.use(
+      categoriesHandler(),
+      http.get(`${API_BASE}/channels/catalog`, ({ request }) => {
+        const url = new URL(request.url);
+        if ((url.searchParams.get('view') ?? 'available') !== 'available') {
+          return HttpResponse.json({ items: [], next_cursor: null });
+        }
+        const cat = url.searchParams.get('category');
+        const byCat: Record<string, typeof newsCh[]> = {
+          news: [newsCh],
+          tech: [techCh],
+        };
+        const channels = cat ? (byCat[cat] ?? []) : [newsCh, techCh];
+        return HttpResponse.json({
+          items: channels.map((channel) => ({
+            channel,
+            subscribers_count: 1,
+            last_post_at: null,
+            is_subscribed: false,
+            is_hidden_from_catalog: false,
+            categories: channel === newsCh ? ['news'] : ['tech'],
+          })),
+          next_cursor: null,
+        });
+      }),
+    );
+    renderWithRouter();
+
+    expect(await screen.findByRole('tab', { name: 'Все' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Технологии' })).toBeInTheDocument();
+    // Default: «Все» is active, both channels visible.
+    await screen.findByText('NewsOne');
+    expect(screen.getByText('TechOne')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Технологии' }));
+    expect(await screen.findByText('TechOne')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText('NewsOne')).not.toBeInTheDocument(),
+    );
+
+    // «Все» clears the filter.
+    await userEvent.click(screen.getByRole('tab', { name: 'Все' }));
+    expect(await screen.findByText('NewsOne')).toBeInTheDocument();
+    expect(screen.getByText('TechOne')).toBeInTheDocument();
   });
 
   it('forwards the search input as q after debouncing and shows a no-results state', async () => {

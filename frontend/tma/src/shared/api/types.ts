@@ -94,9 +94,19 @@ export interface CatalogChannelItem {
   last_post_at: string | null;
   is_subscribed: boolean;
   is_hidden_from_catalog: boolean;
+  categories?: string[];
 }
 
 export interface CatalogPage {
   items: CatalogChannelItem[];
   next_cursor: string | null;
+}
+
+export interface ChannelCategory {
+  slug: string;
+  title: string;
+}
+
+export interface ChannelCategoriesResponse {
+  categories: ChannelCategory[];
 }

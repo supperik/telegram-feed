@@ -1,7 +1,11 @@
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { AvailableCatalogRow } from '@/features/sources/AvailableCatalogRow';
-import { useChannelCatalog, useHideFromCatalog } from '@/features/sources/useChannelCatalog';
+import {
+  useChannelCatalog,
+  useChannelCategories,
+  useHideFromCatalog,
+} from '@/features/sources/useChannelCatalog';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -29,11 +33,43 @@ const SEARCH_STYLE = {
   outline: 'none',
 } as const;
 
+const TABS_STYLE = {
+  display: 'flex',
+  gap: 8,
+  overflowX: 'auto',
+  padding: '0 12px 12px',
+  scrollbarWidth: 'none',
+} as const;
+
+const TAB_STYLE = {
+  flex: '0 0 auto',
+  padding: '8px 14px',
+  borderRadius: 'var(--r-full)',
+  border: '1.5px solid var(--border-soft)',
+  background: 'var(--surface)',
+  color: 'var(--text-mid)',
+  font: '600 13px/1 var(--font-ui)',
+  cursor: 'pointer',
+} as const;
+
+const TAB_ACTIVE_STYLE = {
+  ...TAB_STYLE,
+  background: 'var(--accent)',
+  color: 'var(--accent-on)',
+  border: '1.5px solid var(--accent)',
+} as const;
+
 export function ChannelCatalogSection() {
   const [query, setQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
-  const available = useChannelCatalog('available', debouncedQuery || undefined);
+  const available = useChannelCatalog(
+    'available',
+    debouncedQuery || undefined,
+    activeCategory ?? undefined,
+  );
   const hidden = useChannelCatalog('hidden');
+  const categories = useChannelCategories();
   const hide = useHideFromCatalog();
 
   const items: Item[] = available.data?.pages.flatMap((p) => p.items) ?? [];
@@ -62,13 +98,39 @@ export function ChannelCatalogSection() {
         spellCheck={false}
         style={SEARCH_STYLE}
       />
+      <div style={TABS_STYLE} role="tablist" aria-label="Категории каналов">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeCategory === null}
+          style={activeCategory === null ? TAB_ACTIVE_STYLE : TAB_STYLE}
+          onClick={() => setActiveCategory(null)}
+        >
+          Все
+        </button>
+        {(categories.data ?? []).map((cat) => {
+          const isActive = activeCategory === cat.slug;
+          return (
+            <button
+              key={cat.slug}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              style={isActive ? TAB_ACTIVE_STYLE : TAB_STYLE}
+              onClick={() => setActiveCategory(isActive ? null : cat.slug)}
+            >
+              {cat.title}
+            </button>
+          );
+        })}
+      </div>
       {available.status === 'pending' ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
           <Spinner />
         </div>
       ) : items.length === 0 ? (
         <p style={NOTE_STYLE}>
-          {hasQuery
+          {hasQuery || activeCategory
             ? 'Ничего не найдено по запросу'
             : 'Пока никто не добавил каналов — добавьте свой через форму выше.'}
         </p>

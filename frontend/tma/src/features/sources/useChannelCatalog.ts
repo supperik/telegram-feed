@@ -9,7 +9,13 @@ import { apiFetch } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { messageFor } from '@/features/sources/useAddSource';
 import { SOURCES_QUERY_KEY } from '@/features/sources/useSources';
-import type { AddSourceOut, CatalogPage, QueueStatusOut } from '@/shared/api/types';
+import type {
+  AddSourceOut,
+  CatalogPage,
+  ChannelCategoriesResponse,
+  ChannelCategory,
+  QueueStatusOut,
+} from '@/shared/api/types';
 
 export const CATALOG_QUERY_KEY = ['catalog'] as const;
 
@@ -24,17 +30,31 @@ export type SubscribeState =
   | { kind: 'subscribed' }
   | { kind: 'failed'; message: string };
 
-export function useChannelCatalog(view: View, q?: string) {
+export function useChannelCatalog(view: View, q?: string, category?: string) {
   return useInfiniteQuery<CatalogPage>({
-    queryKey: [...CATALOG_QUERY_KEY, view, q ?? ''],
+    queryKey: [...CATALOG_QUERY_KEY, view, q ?? '', category ?? ''],
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) => {
       const search = new URLSearchParams({ view });
       if (q) search.set('q', q);
+      if (category) search.set('category', category);
       if (pageParam) search.set('cursor', pageParam as string);
       return apiFetch<CatalogPage>(`/channels/catalog?${search.toString()}`);
     },
     getNextPageParam: (last) => last.next_cursor,
+  });
+}
+
+export const CHANNEL_CATEGORIES_QUERY_KEY = ['channel-categories'] as const;
+
+export function useChannelCategories() {
+  return useQuery<ChannelCategory[]>({
+    queryKey: CHANNEL_CATEGORIES_QUERY_KEY,
+    queryFn: async () => {
+      const r = await apiFetch<ChannelCategoriesResponse>('/channels/categories');
+      return r.categories;
+    },
+    staleTime: 60 * 60 * 1000,
   });
 }
 
