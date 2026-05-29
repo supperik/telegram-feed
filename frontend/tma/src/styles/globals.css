@@ -28,6 +28,10 @@
   --tg-button-text: #ffffff;
   --tg-secondary-bg: #ffffff;
 
+  /* Top inset Telegram's floating controls need in fullscreen. bootTelegram
+     writes the live value; 0 outside fullscreen / non-Telegram. */
+  --tf-content-safe-top: 0px;
+
   /* Structural tokens — theme-independent */
   --font-ui: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -142,7 +146,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--tf-content-safe-top, 0px));
   padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
   scroll-behavior: smooth;
 }

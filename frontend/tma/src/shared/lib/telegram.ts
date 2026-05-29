@@ -16,8 +16,29 @@ export function tgPostUrl(
     : `https://t.me/c/${channel.tg_chat_id}/${tgMessageId}`;
 }
 
+interface SafeAreaInset {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
 interface TelegramWebApp {
+  // "unknown" in a plain browser; a concrete value ('ios', 'android',
+  // 'tdesktop', …) only inside a real Telegram client.
+  platform?: string;
   openTelegramLink?: (url: string) => void;
+  ready?: () => void;
+  expand?: () => void;
+  isVersionAtLeast?: (version: string) => boolean;
+  requestFullscreen?: () => void;
+  onEvent?: (event: string, handler: () => void) => void;
+  contentSafeAreaInset?: SafeAreaInset;
+}
+
+function getWebApp(): TelegramWebApp | undefined {
+  return (window as unknown as { Telegram?: { WebApp?: TelegramWebApp } })?.Telegram
+    ?.WebApp;
 }
 
 // Inside Telegram, plain <a href="https://t.me/..."> click navigates the
@@ -26,8 +47,7 @@ interface TelegramWebApp {
 // WebView (browser dev) we fall back to a regular new-tab open so the link
 // still works.
 export function openTelegramLink(url: string): void {
-  const wa = (window as unknown as { Telegram?: { WebApp?: TelegramWebApp } })
-    ?.Telegram?.WebApp;
+  const wa = getWebApp();
   if (wa?.openTelegramLink) {
     wa.openTelegramLink(url);
     return;
@@ -44,21 +64,48 @@ export function openTelegramLink(url: string): void {
 // We therefore drop the global `init()` call (SDK components self-initialise
 // when their hooks subscribe) and pass the launch parameters flat.
 
+// In fullscreen the WebView spans the whole screen and Telegram draws its own
+// controls (close / ⋯ menu, top-right) floating over our content.
+// contentSafeAreaInset is the room they need — expose its top as a CSS var the
+// layout pads for. The device notch is handled separately by
+// env(safe-area-inset-top).
+function syncContentSafeArea(wa: TelegramWebApp): void {
+  const apply = (): void => {
+    const top = wa.contentSafeAreaInset?.top ?? 0;
+    document.documentElement.style.setProperty('--tf-content-safe-top', `${top}px`);
+  };
+  apply();
+  wa.onEvent?.('contentSafeAreaChanged', apply);
+  wa.onEvent?.('fullscreenChanged', apply);
+}
+
 let booted = false;
 
 export function bootTelegram(): void {
   if (booted) return;
   booted = true;
 
-  // If we're not running inside Telegram (e.g. local browser dev), install a
-  // mock environment so SDK hooks return deterministic values. The mock is
-  // intentionally invalid for real auth — local backends should bypass HMAC
-  // verification or use a dev bot token.
-  const insideTelegram =
-    typeof window !== 'undefined' &&
-    Boolean((window as unknown as { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp);
+  const wa = getWebApp();
+  // telegram-web-app.js creates window.Telegram.WebApp everywhere it loads;
+  // only a real client reports a concrete platform.
+  if (wa && wa.platform !== 'unknown') {
+    wa.ready?.();
+    // expand() gives full height on every client; requestFullscreen() (Bot API
+    // 8.0) additionally covers the status bar on mobile. Older/desktop clients
+    // fail the version guard and keep the expanded-but-windowed layout.
+    wa.expand?.();
+    if (wa.isVersionAtLeast?.('8.0')) {
+      wa.requestFullscreen?.();
+      syncContentSafeArea(wa);
+    }
+    return;
+  }
 
-  if (!insideTelegram && import.meta.env.DEV) {
+  // Not inside Telegram (e.g. local browser dev): install a mock environment so
+  // SDK hooks return deterministic values. The mock is intentionally invalid
+  // for real auth — local backends should bypass HMAC verification or use a dev
+  // bot token.
+  if (import.meta.env.DEV) {
     const initDataRaw = new URLSearchParams([
       ['user', JSON.stringify({ id: 1, first_name: 'Dev', username: 'dev' })],
       ['auth_date', Math.floor(Date.now() / 1000).toString()],
