@@ -3,11 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { FeedMedia } from '@/shared/api/types';
 
-// The pull-to-close gesture depends on pointer velocity and container layout,
-// which jsdom doesn't model — so we assert the controller config MediaLightbox
-// owns. The gesture itself is the library's job; the real swipe is verified
-// on-device. The Zoom plugin suppresses pull-to-close while pinching or zoomed
-// (it stops pointer-event propagation), so enabling both directions is safe.
+// Close affordances depend on pointer velocity / hit-testing, which jsdom
+// doesn't model — so we assert the controller config MediaLightbox owns and
+// leave the actual gestures to the library (verified on-device). The Zoom
+// plugin stops pointer-event propagation while pinching or zoomed, and YARL's
+// backdrop close only fires when the tap's down/up target is the same empty
+// slide area — so neither affordance can tear the viewer down mid-pinch or on
+// a tap that lands on the photo itself.
 const { lightboxProps } = vi.hoisted(() => ({ lightboxProps: vi.fn() }));
 
 vi.mock('yet-another-react-lightbox', () => ({
@@ -26,6 +28,7 @@ function photo(id: number): FeedMedia {
 interface CapturedController {
   closeOnPullDown?: boolean;
   closeOnPullUp?: boolean;
+  closeOnBackdropClick?: boolean;
 }
 
 function capturedController(): CapturedController {
@@ -33,7 +36,7 @@ function capturedController(): CapturedController {
   return (call?.[0] as { controller: CapturedController }).controller;
 }
 
-describe('MediaLightbox — close gestures', () => {
+describe('MediaLightbox — close affordances', () => {
   it('closes the viewer on a downward swipe', () => {
     render(<MediaLightbox media={[photo(1)]} openIndex={0} onClose={() => {}} />);
     expect(capturedController().closeOnPullDown).toBe(true);
@@ -42,5 +45,10 @@ describe('MediaLightbox — close gestures', () => {
   it('closes the viewer on an upward swipe', () => {
     render(<MediaLightbox media={[photo(1)]} openIndex={0} onClose={() => {}} />);
     expect(capturedController().closeOnPullUp).toBe(true);
+  });
+
+  it('closes the viewer on a tap in the empty area around the photo', () => {
+    render(<MediaLightbox media={[photo(1)]} openIndex={0} onClose={() => {}} />);
+    expect(capturedController().closeOnBackdropClick).toBe(true);
   });
 });

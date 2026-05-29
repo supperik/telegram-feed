@@ -52,10 +52,13 @@ export function MediaLightbox({ media, openIndex, onClose }: Props) {
       // Swipe up or down to dismiss. The Zoom plugin stops pointer-event
       // propagation while pinching (2 pointers) or zoomed in (zoom > 1), so
       // the controller's pull-to-close only fires on a single-finger drag at
-      // base zoom — it can't tear the viewer down mid-pinch. Backdrop click
-      // stays off so a stray tap doesn't close the viewer.
+      // base zoom — it can't tear the viewer down mid-pinch. A tap on the
+      // empty area around the photo closes too: YARL fires backdrop close only
+      // when the tap's down and up land on the same empty slide area
+      // (yarl__slide), so a tap on the photo itself (yarl__slide_image) is
+      // ignored and a moving pinch never counts as a tap.
       controller={{
-        closeOnBackdropClick: false,
+        closeOnBackdropClick: true,
         closeOnPullDown: true,
         closeOnPullUp: true,
       }}
