@@ -49,9 +49,16 @@ export function MediaLightbox({ media, openIndex, onClose }: Props) {
       // Only a close button in the toolbar. Zoom is driven by gestures
       // (pinch, double-tap) and keyboard (+/-) — no +/− chrome.
       toolbar={{ buttons: ['close'] }}
-      // Backdrop clicks and pull-down close used to fire mid-pinch and
-      // tear the viewer down — disabled.
-      controller={{ closeOnBackdropClick: false, closeOnPullDown: false }}
+      // Swipe up or down to dismiss. The Zoom plugin stops pointer-event
+      // propagation while pinching (2 pointers) or zoomed in (zoom > 1), so
+      // the controller's pull-to-close only fires on a single-finger drag at
+      // base zoom — it can't tear the viewer down mid-pinch. Backdrop click
+      // stays off so a stray tap doesn't close the viewer.
+      controller={{
+        closeOnBackdropClick: false,
+        closeOnPullDown: true,
+        closeOnPullUp: true,
+      }}
       carousel={{ finite: true }}
       zoom={{ maxZoomPixelRatio: 3, doubleTapDelay: 250 }}
     />
