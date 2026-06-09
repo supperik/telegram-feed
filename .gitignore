@@ -83,6 +83,9 @@ test-results/
 # Xray sidecar — VLESS uuid/host are secrets, never commit the live config
 infra/xray/config.json
 
+# Naive sidecar - credentials live in TG_NAIVE_URL; never commit a hand-written config
+infra/naive/config.json
+
 # Worktrees fallback location (used when EnterWorktree is unavailable in the session)
 .worktrees/
 

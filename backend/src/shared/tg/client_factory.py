@@ -20,8 +20,8 @@ def make_client(settings: Settings, *, sessions_dir: str = "/app/sessions") -> T
       ``ConnectionTcpMTProxyRandomizedIntermediate`` and a ``(host, port, secret)``
       proxy tuple.
     - ``tg_proxy_type == "socks5"``: passes Telethon's canonical SOCKS5 dict
-      (``{proxy_type, addr, port, rdns}``) — meant to talk to the xray sidecar
-      that terminates a VLESS tunnel. No ``connection=`` override.
+      (``{proxy_type, addr, port, rdns}``) — meant to talk to the naive sidecar
+      (default) or the xray/VLESS sidecar (fallback). No ``connection=`` override.
     - else: direct MTProto connection.
     """
     os.makedirs(sessions_dir, exist_ok=True)
