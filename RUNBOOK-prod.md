@@ -164,7 +164,50 @@ TG_PROXY_SECRET=<32-символьный hex secret из @MTProxybot или mtg>
 ```
 Оставь `TG_PROXY_TYPE` пустым (по умолчанию) — Telethon идёт напрямую к Telegram-DC.
 
-**Альтернатива — VLESS sidecar (если у тебя есть свой VLESS-сервер):**
+**Рекомендуемый путь — naive sidecar (если у тебя есть `naive+https://` аккаунт):**
+
+`docker-compose` поднимает naive-сайдкар — он заворачивает SOCKS5 → NaiveProxy-туннель → твой сервер → Telegram. Конфиг подаётся целиком через `naive+https://` URI: init-контейнер (`naive-init`) парсит его в naive `config.json` до старта sidecar'а. Никакого ручного JSON.
+
+1. В `.env` (вместо `TG_PROXY_TYPE=mtproxy`):
+   ```
+   TG_PROXY_TYPE=socks5
+   TG_PROXY_HOST=naive
+   TG_PROXY_PORT=1080
+   TG_PROXY_SECRET=
+   TG_NAIVE_URL=naive+https://<user>:<pass>@<host>:<port>#<name>
+   ```
+   Транспорты `https` (HTTP/2) и `quic` (HTTP/3); padding в naive автоматический — отдельных параметров не нужно.
+
+2. Перезапуск (`--build` — образ naive собирается локально из `infra/naive/`):
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build naive-init naive
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml restart ingester
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs naive-init    # "wrote naive config to /etc/naive/config.json", без ошибок
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs ingester | tail -30
+   ```
+   В логах ingester появится `ingester.connected user_id=...`. Если до этого был fresh deploy (или после `down -v`) — сначала повтори шаг 8 (интерактивный SMS-логин).
+
+**Fallback — VLESS sidecar (xray):**
+
+Сервисы `xray-init`/`xray` убраны из активного `docker-compose.yml` (по умолчанию — naive); `infra/xray/parse_vless.py` и `config.example.json` остаются в репо. Чтобы вернуть VLESS — добавь блок обратно в `docker-compose.yml`, верни том `xray_config:` в секцию `volumes:` и поменяй `ingester.depends_on` с `naive` на `xray`:
+   ```yaml
+     xray-init:
+       image: python:3.12-alpine
+       restart: "no"
+       env_file: .env
+       volumes:
+         - ./infra/xray/parse_vless.py:/parse_vless.py:ro
+         - xray_config:/etc/xray
+       command: ["python", "/parse_vless.py"]
+     xray:
+       image: ghcr.io/xtls/xray-core:25.12.8
+       restart: unless-stopped
+       depends_on:
+         xray-init: { condition: service_completed_successfully }
+       volumes:
+         - xray_config:/etc/xray:ro
+       command: ["run", "-config", "/etc/xray/config.json"]
+   ```
 
 Если MTProxy недоступен или капризничает (FakeTLS-варианты иногда не работают с Telethon), подними локальный xray-sidecar — он заворачивает SOCKS5 → VLESS-туннель → твой сервер → Telegram. Это более устойчивый путь: TLS-маскированный трафик сложнее блокировать DPI.
 
@@ -483,7 +526,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v         
 ### Ingester падает с `Connection to Telegram failed N time(s)` / `TimeoutError` на Attempt 1..6
 - VDS-провайдер режет MTProto-IP (`149.154.0.0/16`). Проверь: `curl -v --max-time 6 https://149.154.167.51:443` висит, а `curl https://1.1.1.1` — отвечает.
 - Решение: настрой MTProxy через переменные `TG_PROXY_*` в `.env` (см. шаг 4), затем `docker compose -f docker-compose.yml -f docker-compose.prod.yml restart ingester`.
-- Альтернатива №1 (рекомендуется): подними **xray-sidecar с VLESS outbound** (см. шаг 4 — раздел «Альтернатива — VLESS sidecar»). TLS-маскированный туннель устойчивее MTProxy к DPI.
+- Решение №1 (рекомендуется): подними **naive-сайдкар** (см. шаг 4 — раздел «Рекомендуемый путь — naive sidecar»). NaiveProxy-туннель маскируется под обычный HTTPS, устойчивее MTProxy к DPI. VLESS (xray) остаётся fallback'ом.
 - Альтернатива №2: мигрировать VDS к провайдеру вне зоны блокировки (Hetzner / Contabo / OVH).
 
 ### Ingester циклится с запросом кода SMS
