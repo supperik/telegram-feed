@@ -181,7 +181,8 @@ TG_PROXY_SECRET=<32-символьный hex secret из @MTProxybot или mtg>
 2. Перезапуск (`--build` — образ naive собирается локально из `infra/naive/`):
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build naive-init naive
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml restart ingester
+   # --force-recreate: иначе ingester не подхватит новый .env (docker compose restart не перечитывает env_file)
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate ingester
    docker compose -f docker-compose.yml -f docker-compose.prod.yml logs naive-init    # "wrote naive config to /etc/naive/config.json", без ошибок
    docker compose -f docker-compose.yml -f docker-compose.prod.yml logs ingester | tail -30
    ```
