@@ -60,23 +60,23 @@ services:
       timeout: 3s
       retries: 10
 
-  xray-init:
+  naive-init:
     image: python:3.12-alpine
     restart: "no"
     env_file: .env
     volumes:
-      - ./infra/xray/parse_vless.py:/parse_vless.py:ro
-      - xray_config:/etc/xray
-    command: ["python", "/parse_vless.py"]
+      - ./infra/naive/parse_naive.py:/parse_naive.py:ro
+      - naive_config:/etc/naive
+    command: ["python", "/parse_naive.py"]
 
-  xray:
-    image: ghcr.io/xtls/xray-core:25.12.8
+  naive:
+    build:
+      context: infra/naive
     restart: unless-stopped
     depends_on:
-      xray-init: { condition: service_completed_successfully }
+      naive-init: { condition: service_completed_successfully }
     volumes:
-      - xray_config:/etc/xray:ro
-    command: ["run", "-config", "/etc/xray/config.json"]
+      - naive_config:/etc/naive:ro
 
   ingester:
     build:
@@ -88,7 +88,7 @@ services:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
       minio:    { condition: service_healthy }
-      xray:     { condition: service_started }
+      naive:    { condition: service_started }
     command: ["python", "-m", "ingester.main"]
     volumes:
       - tg_session:/app/sessions
@@ -108,4 +108,4 @@ volumes:
   redis_data:
   minio_data:
   tg_session:
-  xray_config:
+  naive_config:
